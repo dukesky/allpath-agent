@@ -27,6 +27,9 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added the first persistent Agent Loop with model-call limits, tool execution, structured tool failures, and resumable message history.
 - Added a message metadata migration so assistant tool calls survive session persistence and reconstruction.
 - Added lifecycle validation for assistant tool calls and matching tool-result messages.
+- Added GitHub Actions CI across Python 3.11, 3.12, and 3.13.
+- Added one shared local and CI validation command that compiles source files and runs the complete test suite.
+- Added milestone-specific validation standards covering unit, integration, E2E, and real-provider smoke tests.
 
 ### Changed
 

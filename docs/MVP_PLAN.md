@@ -69,6 +69,7 @@ Initial tools should be:
 - Integration tests exercise a complete model -> tool -> model loop using a deterministic fake provider.
 - Integration tests verify session resume and capability-state persistence against a temporary SQLite database.
 - One manual smoke-test script documents the real-provider local run.
+- GitHub Actions runs the shared validation suite on every push and pull request.
 
 ## Implementation sequence
 

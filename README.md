@@ -1,5 +1,7 @@
 # Allpath Agent
 
+[![CI](https://github.com/dukesky/allpath-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/dukesky/allpath-agent/actions/workflows/ci.yml)
+
 Allpath Agent is a small personal AI agent that runs locally, learns its user's preferences, progressively teaches its own capabilities, and routes each task to an appropriate model.
 
 The project is inspired by architectural lessons from Hermes Agent, but it is an independent implementation with a deliberately smaller core and a conversation-first onboarding experience.
@@ -116,10 +118,10 @@ python -m pip install -e '.[dev]'
 Run tests:
 
 ```bash
-pytest
+python scripts/run_tests.py
 ```
 
-The core suite can also run before installing development dependencies:
+The underlying standard-library suite can also run directly:
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
@@ -158,11 +160,14 @@ routing:
 - [Product design](docs/PRODUCT_DESIGN.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [MVP implementation plan](docs/MVP_PLAN.md)
+- [Validation strategy](docs/VALIDATION.md)
 - [Change log](CHANGELOG.md)
 
 ## Change discipline
 
 Every meaningful change must update [CHANGELOG.md](CHANGELOG.md) under `Unreleased`. Released entries are grouped by version and date. The log records user-visible behavior, architecture decisions, fixes, tests, and documentation changes without duplicating commit-level noise.
+
+Every change must also pass the same validation command locally and in GitHub Actions. See [Validation strategy](docs/VALIDATION.md) for the milestone-specific evidence required before work is considered complete.
 
 ## Design reference
 

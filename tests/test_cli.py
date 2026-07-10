@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -67,6 +68,19 @@ class CliEndToEndTestCase(unittest.TestCase):
             self.assertEqual([message.role for message in messages], ["user", "assistant", "user", "assistant"])
             self.assertEqual(first.stdout.count("Tip ["), 1)
             self.assertEqual(second.stdout.count("Tip ["), 0)
+
+    def test_demo_writes_structured_logs_without_conversation_content(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            secret_message = "private-message-that-must-not-be-logged"
+            result = run_cli(home, f"{secret_message}\n/exit\n", "--demo")
+            log_text = (home / "logs" / "agent.jsonl").read_text(encoding="utf-8")
+            records = [json.loads(line) for line in log_text.splitlines()]
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(secret_message, log_text)
+        self.assertEqual(records[0]["event"], "task_started")
+        self.assertEqual(records[-1]["event"], "task_completed")
 
     def test_demo_time_tool_runs_end_to_end(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

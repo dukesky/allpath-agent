@@ -5,7 +5,13 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from allpath_agent.agent import AgentLoop, ChatResponse, IterationLimitError, ToolCall
+from allpath_agent.agent import (
+    AgentLoop,
+    BudgetExceededError,
+    ChatResponse,
+    IterationLimitError,
+    ToolCall,
+)
 from allpath_agent.models import FakeProvider, ModelProfile, ProviderPool
 from allpath_agent.storage import (
     Database,
@@ -48,7 +54,14 @@ class AgentLoopTestCase(unittest.TestCase):
         self.temporary_directory.cleanup()
 
     def test_completes_simple_conversation_and_persists_messages(self) -> None:
-        provider = FakeProvider([ChatResponse(content="Hello back")])
+        provider = FakeProvider(
+            [
+                ChatResponse(
+                    content="Hello back",
+                    usage={"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14},
+                )
+            ]
+        )
         loop = AgentLoop(provider, self.messages, self.executions, MappingToolExecutor({}))
 
         result = loop.run(
@@ -61,6 +74,10 @@ class AgentLoopTestCase(unittest.TestCase):
 
         self.assertEqual(result.content, "Hello back")
         self.assertEqual(result.model_calls, 1)
+        self.assertEqual(result.input_tokens, 10)
+        self.assertEqual(result.output_tokens, 4)
+        self.assertEqual(result.total_tokens, 14)
+        self.assertTrue(result.usage_reported)
         self.assertEqual(
             [item.role for item in self.messages.list_for_session(self.session.id)],
             ["user", "assistant"],
@@ -196,6 +213,64 @@ class AgentLoopTestCase(unittest.TestCase):
                 "You are helpful.",
                 self.profile,
             )
+
+    def test_token_budget_blocks_tool_execution_and_follow_up_call(self) -> None:
+        provider = FakeProvider(
+            [
+                ChatResponse(
+                    tool_calls=(ToolCall("call-1", "current_time", {}),),
+                    usage={"input_tokens": 8, "output_tokens": 2},
+                )
+            ]
+        )
+        executor = MappingToolExecutor({"current_time": "noon"})
+        loop = AgentLoop(
+            provider,
+            self.messages,
+            self.executions,
+            executor,
+            max_task_tokens=10,
+        )
+
+        with self.assertRaises(BudgetExceededError):
+            loop.run(
+                self.session.id,
+                "task-budget",
+                "Keep going",
+                "You are helpful.",
+                self.profile,
+            )
+
+        self.assertEqual(len(provider.requests), 1)
+        self.assertEqual(executor.calls, [])
+
+    def test_final_answer_is_returned_after_single_call_crosses_budget(self) -> None:
+        provider = FakeProvider(
+            [
+                ChatResponse(
+                    content="Completed answer",
+                    usage={"input_tokens": 8, "output_tokens": 7},
+                )
+            ]
+        )
+        loop = AgentLoop(
+            provider,
+            self.messages,
+            self.executions,
+            MappingToolExecutor({}),
+            max_task_tokens=10,
+        )
+
+        result = loop.run(
+            self.session.id,
+            "task-final-over-budget",
+            "Answer once",
+            "You are helpful.",
+            self.profile,
+        )
+
+        self.assertEqual(result.content, "Completed answer")
+        self.assertEqual(result.total_tokens, 15)
 
     def test_registry_runtime_denies_side_effect_and_returns_result_to_model(self) -> None:
         provider = FakeProvider(

@@ -25,6 +25,8 @@ max_output_tokens = 4096
 [agent]
 system_prompt = "You are Allpath Agent, a concise and helpful personal assistant."
 max_model_calls = 12
+max_task_tokens = 100000
+max_task_cost_usd = 0.0
 advanced_threshold = 6
 
 [models.fast]
@@ -35,6 +37,8 @@ cost = 1
 supports_tools = true
 supports_vision = false
 max_context_tokens = 32000
+input_cost_per_million = 0.0
+output_cost_per_million = 0.0
 
 [models.advanced]
 provider = "anthropic"
@@ -44,6 +48,8 @@ cost = 8
 supports_tools = true
 supports_vision = true
 max_context_tokens = 128000
+input_cost_per_million = 0.0
+output_cost_per_million = 0.0
 """
 
 
@@ -67,6 +73,8 @@ class AgentConfig:
     system_prompt: str
     max_model_calls: int
     advanced_threshold: int
+    max_task_tokens: int = 100_000
+    max_task_cost_usd: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -112,6 +120,8 @@ def _parse_config(raw: dict[str, Any]) -> AppConfig:
             system_prompt=_required_string(agent_raw, "system_prompt"),
             max_model_calls=_positive_integer(agent_raw, "max_model_calls"),
             advanced_threshold=_positive_integer(agent_raw, "advanced_threshold"),
+            max_task_tokens=_non_negative_integer(agent_raw, "max_task_tokens", 100_000),
+            max_task_cost_usd=_non_negative_number(agent_raw, "max_task_cost_usd", 0.0),
         )
         models = tuple(
             _model_profile(name, value)
@@ -210,6 +220,16 @@ def _model_profile(name: str, raw: dict[str, Any]) -> ModelProfile:
         supports_vision=_boolean(raw, "supports_vision", False),
         max_context_tokens=_positive_integer(raw, "max_context_tokens"),
         provider=_optional_string(raw, "provider", "default"),
+        input_cost_per_million=_non_negative_number(
+            raw,
+            "input_cost_per_million",
+            0.0,
+        ),
+        output_cost_per_million=_non_negative_number(
+            raw,
+            "output_cost_per_million",
+            0.0,
+        ),
     )
 
 
@@ -234,11 +254,22 @@ def _positive_integer(raw: dict[str, Any], key: str, default: int | None = None)
     return value
 
 
-def _non_negative_integer(raw: dict[str, Any], key: str) -> int:
-    value = raw[key]
+def _non_negative_integer(
+    raw: dict[str, Any],
+    key: str,
+    default: int | None = None,
+) -> int:
+    value = raw.get(key, default) if default is not None else raw[key]
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ConfigError(f"{key} must be a non-negative integer")
     return value
+
+
+def _non_negative_number(raw: dict[str, Any], key: str, default: float) -> float:
+    value = raw.get(key, default)
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+        raise ConfigError(f"{key} must be a non-negative number")
+    return float(value)
 
 
 def _boolean(raw: dict[str, Any], key: str, default: bool) -> bool:

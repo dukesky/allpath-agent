@@ -112,3 +112,5 @@ Future Codex account authentication will only use an official supported Codex su
 ## Prompt caching and routing
 
 A task is pinned to one model profile. If the router selects a different provider for a later task, provider-side prompt caches are not assumed to transfer. Allpath does not switch providers between individual tool calls inside one task.
+
+Provider usage is normalized for task budgets and local reporting. Configure current model prices and limits as described in [Task budgets and structured logs](BUDGETS_AND_LOGS.md).

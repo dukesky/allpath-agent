@@ -22,6 +22,8 @@ class ConfigTestCase(unittest.TestCase):
             {"advanced": "anthropic", "fast": "openai"},
         )
         self.assertEqual(config.agent.max_model_calls, 12)
+        self.assertEqual(config.agent.max_task_tokens, 100_000)
+        self.assertEqual(config.agent.max_task_cost_usd, 0.0)
 
     def test_legacy_single_provider_config_remains_supported(self) -> None:
         legacy = """[provider]
@@ -106,6 +108,31 @@ max_context_tokens = 1000
             path = Path(directory) / "config.toml"
             path.write_text(config_text, encoding="utf-8")
             with self.assertRaisesRegex(ConfigError, "does not support auth=oauth"):
+                load_config(path)
+
+    def test_negative_budget_is_rejected(self) -> None:
+        config_text = """[providers.local]
+protocol = "openai_chat_completions"
+auth = "none"
+base_url = "http://127.0.0.1:11434/v1"
+
+[agent]
+system_prompt = "Helpful"
+max_model_calls = 4
+advanced_threshold = 3
+max_task_tokens = -1
+
+[models.fast]
+provider = "local"
+model = "local-model"
+quality = 4
+cost = 1
+max_context_tokens = 1000
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            path.write_text(config_text, encoding="utf-8")
+            with self.assertRaisesRegex(ConfigError, "max_task_tokens"):
                 load_config(path)
 
 

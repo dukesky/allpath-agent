@@ -8,7 +8,7 @@ The project is inspired by architectural lessons from Hermes Agent, but it is an
 
 ## Project status
 
-**Current phase:** Locally runnable MVP — persistence, routing, Agent Loop, tools, approvals, terminal sessions, and progressive capability learning are implemented.
+**Current phase:** Locally runnable MVP — persistence, routing, Agent Loop, tools, approvals, terminal sessions, task budgets, structured logs, and progressive capability learning are implemented.
 
 The first release target is a testable local agent, not a production multi-platform system. A successful MVP must let a user start the agent locally, hold a multi-turn conversation, invoke a small set of tools, persist sessions, and observe model-routing and capability-learning decisions.
 
@@ -66,6 +66,8 @@ The first locally runnable MVP includes:
 - durable user memory;
 - progressive capability recommendations;
 - clear tool approval boundaries;
+- per-task model-call, token, and optional estimated-cost budgets;
+- privacy-safe structured JSONL runtime logs;
 - interruption and graceful shutdown;
 - automated unit and local integration tests.
 
@@ -179,6 +181,11 @@ auth = "api_key"
 base_url = "https://api.anthropic.com"
 api_key_env = "ANTHROPIC_API_KEY"
 
+[agent]
+max_model_calls = 12
+max_task_tokens = 100000
+max_task_cost_usd = 0.0
+
 [models.fast]
 provider = "openai"
 model = "gpt-4.1-mini"
@@ -187,6 +194,8 @@ cost = 1
 supports_tools = true
 supports_vision = false
 max_context_tokens = 32000
+input_cost_per_million = 0.0
+output_cost_per_million = 0.0
 
 [models.advanced]
 provider = "anthropic"
@@ -196,13 +205,18 @@ cost = 8
 supports_tools = true
 supports_vision = true
 max_context_tokens = 128000
+input_cost_per_million = 0.0
+output_cost_per_million = 0.0
 ```
+
+Set model prices from the provider's current pricing page before enabling a nonzero cost budget. Runtime events are written to `~/.allpath-agent/logs/agent.jsonl` without conversation content, tool arguments, or credentials.
 
 ## Documentation
 
 - [Product design](docs/PRODUCT_DESIGN.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Model providers and authentication](docs/PROVIDERS.md)
+- [Task budgets and structured logs](docs/BUDGETS_AND_LOGS.md)
 - [MVP implementation plan](docs/MVP_PLAN.md)
 - [Validation strategy](docs/VALIDATION.md)
 - [Change log](CHANGELOG.md)

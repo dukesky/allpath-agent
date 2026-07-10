@@ -13,6 +13,12 @@ class ModelProfile:
     supports_vision: bool = False
     max_context_tokens: int = 32_000
     provider: str = "default"
+    input_cost_per_million: float = 0.0
+    output_cost_per_million: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.input_cost_per_million < 0 or self.output_cost_per_million < 0:
+            raise ValueError("model token prices cannot be negative")
 
 
 @dataclass(frozen=True)

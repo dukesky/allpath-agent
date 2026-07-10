@@ -60,6 +60,13 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added `allpath-agent providers` for safe provider and credential readiness checks.
 - Added provider IDs to persisted routing decisions and retained compatibility with legacy single-provider configuration.
 - Added multi-provider, native Anthropic, external CLI, status, configuration, and persistence tests.
+- Added per-task model-call, normalized token, and optional estimated-USD-cost budgets.
+- Added configurable per-model input and output token prices without hard-coded vendor pricing.
+- Added usage and estimated-cost summaries for providers that report token usage.
+- Added append-only JSONL events for task, model-call, and tool-call lifecycle boundaries.
+- Kept prompts, conversation content, credentials, tool arguments, results, and provider bodies out of logs.
+- Isolated logging write failures so observability cannot interrupt agent work.
+- Added budget, usage normalization, cost estimation, log privacy, and CLI logging tests.
 
 ### Changed
 

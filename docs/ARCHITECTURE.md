@@ -32,6 +32,8 @@ Application service
 
 Owns message ordering, model calls, tool execution, interruption boundaries, and final responses. It does not contain channel-specific logic or onboarding copy.
 
+Each task owns an independent budget tracker. Provider-specific usage fields are normalized into input, output, and total tokens, then combined with model-profile prices for an estimated USD cost. Limits are checked before continuation so an exhausted tool loop cannot execute more tools or make another model call.
+
 ### Model router
 
 First filters models by hard requirements, then ranks eligible profiles by task complexity, expected quality, cost policy, and user preference. A task pins its selected model. Escalation is monotonic for the remainder of that task.
@@ -53,6 +55,10 @@ Owns resumable state machines for OAuth, QR pairing, secrets, and permission che
 ### Storage
 
 SQLite stores sessions, messages, tool executions, model decisions, workflow runs, connection metadata, and capability progress. Secrets are referenced from a separate encrypted store and are never written into message history.
+
+### Observability
+
+The local runtime writes append-only JSONL events for task, model-call, and tool-call boundaries. Events contain IDs, timings, usage counters, model metadata, statuses, and error types. They never contain prompts, conversation content, credentials, tool arguments, tool results, or provider response bodies. Logging failures do not interrupt the Agent Loop.
 
 ## Prompt caching
 

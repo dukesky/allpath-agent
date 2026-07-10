@@ -114,6 +114,15 @@ Real API tests are intentionally separate from default CI because they require s
 - Real successful actions advance learning state.
 - Current work completes before a lesson is suggested.
 
+### Milestone 6: Hardening
+
+- OpenAI-style and Anthropic-style usage fields normalize into shared totals.
+- Token and estimated-cost exhaustion prevent tool execution and follow-up model calls.
+- Provider final answers remain available after work already completed crosses a budget.
+- JSONL logs contain lifecycle metadata without conversation content, tool payloads, or credentials.
+- Logging-path failures do not break agent work.
+- CLI subprocess tests verify logs are created with privacy boundaries intact.
+
 The default suite now validates all of these behaviors against temporary SQLite databases and through the real CLI subprocess.
 
 ## Supported environments

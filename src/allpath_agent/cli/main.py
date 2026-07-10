@@ -5,11 +5,12 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from allpath_agent.agent import AgentLoop
+from allpath_agent.agent import AgentLoop, BudgetExceededError, IterationLimitError
 from allpath_agent.application import AgentApplication, demo_profiles
 from allpath_agent.config import AppConfig, ConfigError, load_config, resolve_home, write_default_config
 from allpath_agent.curriculum import CurriculumEngine, CurriculumService, default_capabilities
 from allpath_agent.models import DemoProvider, ModelRouter, ProviderError, ProviderPool
+from allpath_agent.observability import JsonlEventLogger
 from allpath_agent.provider_runtime import (
     available_provider_ids,
     build_provider_pool,
@@ -171,11 +172,23 @@ def _chat(
             output("")
             output("Task interrupted. You can continue in the same session.")
             continue
-        except (ProviderError, ValueError, KeyError) as error:
+        except (
+            BudgetExceededError,
+            IterationLimitError,
+            ProviderError,
+            ValueError,
+            KeyError,
+        ) as error:
             _close_interrupted_turn(messages, active_session_id)
             error_output(f"Task failed: {error}")
             continue
         output(f"Agent [{result.agent.model_profile}]> {result.agent.content}")
+        if result.agent.usage_reported:
+            output(
+                f"Usage: calls={result.agent.model_calls} "
+                f"tokens={result.agent.total_tokens} "
+                f"estimated_cost=${result.agent.estimated_cost_usd:.6f}"
+            )
         if result.suggestion:
             output(f"Tip [{result.suggestion.capability_id}]: {result.suggestion.message}")
 
@@ -192,6 +205,8 @@ def _build_application(
         profiles = demo_profiles()
         system_prompt = "You are Allpath Agent running in deterministic offline demo mode."
         max_model_calls = 12
+        max_task_tokens = 100_000
+        max_task_cost_usd = 0.0
         advanced_threshold = 6
     else:
         config = load_config(home / "config.toml")
@@ -201,6 +216,8 @@ def _build_application(
         profiles = config.models
         system_prompt = config.agent.system_prompt
         max_model_calls = config.agent.max_model_calls
+        max_task_tokens = config.agent.max_task_tokens
+        max_task_cost_usd = config.agent.max_task_cost_usd
         advanced_threshold = config.agent.advanced_threshold
 
     memories = MemoryRepository(database)
@@ -217,6 +234,9 @@ def _build_application(
         tool_executions,
         runtime,
         max_model_calls=max_model_calls,
+        max_task_tokens=max_task_tokens,
+        max_task_cost_usd=max_task_cost_usd,
+        event_logger=JsonlEventLogger(home / "logs" / "agent.jsonl"),
     )
     curriculum = CurriculumService(
         CurriculumEngine(default_capabilities()),

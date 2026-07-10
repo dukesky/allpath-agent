@@ -119,6 +119,12 @@ Run tests:
 pytest
 ```
 
+The core suite can also run before installing development dependencies:
+
+```bash
+PYTHONPATH=src python -m unittest discover -s tests -v
+```
+
 The local run command will become:
 
 ```bash

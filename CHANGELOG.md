@@ -16,6 +16,11 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added initial tests for model routing and curriculum recommendations.
 - Added a complete project README with goals, architecture, setup direction, and MVP scope.
 - Added a testable local MVP implementation plan and acceptance criteria.
+- Added a versioned SQLite migration runner with foreign keys, WAL mode, and idempotent initialization.
+- Added repositories for sessions, messages, model-routing decisions, durable memory, capability progress, and tool execution records.
+- Added the initial persistent workflow-run schema for future resumable setup flows.
+- Added storage integration tests against temporary SQLite databases.
+- Made the complete test suite compatible with Python's standard-library `unittest` runner as well as `pytest`.
 
 ### Changed
 

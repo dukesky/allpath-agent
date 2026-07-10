@@ -6,12 +6,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from allpath_agent.models import ModelProfile
+from allpath_agent.models import AuthType, ModelProfile, ProviderProtocol
 
 
-DEFAULT_CONFIG = """[provider]
-base_url = "https://api.example.com/v1"
-api_key_env = "ALLPATH_API_KEY"
+DEFAULT_CONFIG = """[providers.openai]
+protocol = "openai_chat_completions"
+auth = "api_key"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+
+[providers.anthropic]
+protocol = "anthropic_messages"
+auth = "api_key"
+base_url = "https://api.anthropic.com"
+api_key_env = "ANTHROPIC_API_KEY"
+max_output_tokens = 4096
 
 [agent]
 system_prompt = "You are Allpath Agent, a concise and helpful personal assistant."
@@ -19,6 +28,7 @@ max_model_calls = 12
 advanced_threshold = 6
 
 [models.fast]
+provider = "openai"
 model = "replace-with-fast-model"
 quality = 4
 cost = 1
@@ -27,6 +37,7 @@ supports_vision = false
 max_context_tokens = 32000
 
 [models.advanced]
+provider = "anthropic"
 model = "replace-with-advanced-model"
 quality = 10
 cost = 8
@@ -42,8 +53,13 @@ class ConfigError(ValueError):
 
 @dataclass(frozen=True)
 class ProviderConfig:
+    id: str
+    protocol: ProviderProtocol
+    auth: AuthType
     base_url: str
-    api_key_env: str
+    api_key_env: str = ""
+    max_output_tokens: int = 4096
+    external_command: str = ""
 
 
 @dataclass(frozen=True)
@@ -55,7 +71,7 @@ class AgentConfig:
 
 @dataclass(frozen=True)
 class AppConfig:
-    provider: ProviderConfig
+    providers: dict[str, ProviderConfig]
     agent: AgentConfig
     models: tuple[ModelProfile, ...]
 
@@ -89,19 +105,13 @@ def load_config(path: Path) -> AppConfig:
 
 def _parse_config(raw: dict[str, Any]) -> AppConfig:
     try:
-        provider_raw = raw["provider"]
         agent_raw = raw["agent"]
         models_raw = raw["models"]
-        provider = ProviderConfig(
-            base_url=_required_string(provider_raw, "base_url"),
-            api_key_env=_required_string(provider_raw, "api_key_env"),
-        )
-        max_model_calls = _positive_integer(agent_raw, "max_model_calls")
-        advanced_threshold = _positive_integer(agent_raw, "advanced_threshold")
+        providers = _parse_providers(raw)
         agent = AgentConfig(
             system_prompt=_required_string(agent_raw, "system_prompt"),
-            max_model_calls=max_model_calls,
-            advanced_threshold=advanced_threshold,
+            max_model_calls=_positive_integer(agent_raw, "max_model_calls"),
+            advanced_threshold=_positive_integer(agent_raw, "advanced_threshold"),
         )
         models = tuple(
             _model_profile(name, value)
@@ -112,7 +122,82 @@ def _parse_config(raw: dict[str, Any]) -> AppConfig:
         raise ConfigError(f"configuration is missing required section or value: {error}") from error
     if not models:
         raise ConfigError("configuration requires at least one model profile")
-    return AppConfig(provider, agent, models)
+    unknown = sorted({profile.provider for profile in models} - set(providers))
+    if unknown:
+        raise ConfigError(f"model profile references unknown provider: {unknown[0]}")
+    incompatible = [
+        profile.name
+        for profile in models
+        if profile.supports_tools
+        and providers[profile.provider].protocol == ProviderProtocol.EXTERNAL_CLI
+    ]
+    if incompatible:
+        raise ConfigError(
+            f"external CLI model profile must set supports_tools = false: {incompatible[0]}"
+        )
+    return AppConfig(providers, agent, models)
+
+
+def _parse_providers(raw: dict[str, Any]) -> dict[str, ProviderConfig]:
+    configured = raw.get("providers")
+    if isinstance(configured, dict):
+        providers = {
+            provider_id: _provider_config(provider_id, value)
+            for provider_id, value in sorted(configured.items())
+            if isinstance(value, dict)
+        }
+        if not providers:
+            raise ConfigError("configuration requires at least one provider")
+        return providers
+
+    legacy = raw.get("provider")
+    if not isinstance(legacy, dict):
+        raise ConfigError("configuration requires a [providers.<id>] section")
+    return {
+        "default": ProviderConfig(
+            id="default",
+            protocol=ProviderProtocol.OPENAI_CHAT_COMPLETIONS,
+            auth=AuthType.API_KEY,
+            base_url=_required_string(legacy, "base_url"),
+            api_key_env=_required_string(legacy, "api_key_env"),
+        )
+    }
+
+
+def _provider_config(provider_id: str, raw: dict[str, Any]) -> ProviderConfig:
+    try:
+        protocol = ProviderProtocol(_required_string(raw, "protocol"))
+        auth = AuthType(_required_string(raw, "auth"))
+    except ValueError as error:
+        raise ConfigError(f"provider {provider_id} has unsupported protocol or auth type") from error
+    base_url = _optional_string(raw, "base_url", "")
+    api_key_env = _optional_string(raw, "api_key_env", "")
+    external_command = _optional_string(raw, "external_command", "")
+    supported_auth = {
+        ProviderProtocol.OPENAI_CHAT_COMPLETIONS: {AuthType.API_KEY, AuthType.NONE},
+        ProviderProtocol.ANTHROPIC_MESSAGES: {AuthType.API_KEY},
+        ProviderProtocol.EXTERNAL_CLI: {AuthType.EXTERNAL_CLI},
+    }
+    if auth not in supported_auth[protocol]:
+        raise ConfigError(
+            f"provider {provider_id} does not support auth={auth.value} "
+            f"with protocol={protocol.value}"
+        )
+    if protocol != ProviderProtocol.EXTERNAL_CLI and not base_url:
+        raise ConfigError(f"provider {provider_id} requires base_url")
+    if auth == AuthType.API_KEY and not api_key_env:
+        raise ConfigError(f"provider {provider_id} requires api_key_env")
+    if auth == AuthType.EXTERNAL_CLI and not external_command:
+        raise ConfigError(f"provider {provider_id} requires external_command")
+    return ProviderConfig(
+        id=provider_id,
+        protocol=protocol,
+        auth=auth,
+        base_url=base_url,
+        api_key_env=api_key_env,
+        max_output_tokens=_positive_integer(raw, "max_output_tokens", 4096),
+        external_command=external_command,
+    )
 
 
 def _model_profile(name: str, raw: dict[str, Any]) -> ModelProfile:
@@ -124,6 +209,7 @@ def _model_profile(name: str, raw: dict[str, Any]) -> ModelProfile:
         supports_tools=_boolean(raw, "supports_tools", True),
         supports_vision=_boolean(raw, "supports_vision", False),
         max_context_tokens=_positive_integer(raw, "max_context_tokens"),
+        provider=_optional_string(raw, "provider", "default"),
     )
 
 
@@ -134,8 +220,15 @@ def _required_string(raw: dict[str, Any], key: str) -> str:
     return value.strip()
 
 
-def _positive_integer(raw: dict[str, Any], key: str) -> int:
-    value = raw[key]
+def _optional_string(raw: dict[str, Any], key: str, default: str) -> str:
+    value = raw.get(key, default)
+    if not isinstance(value, str):
+        raise ConfigError(f"{key} must be a string")
+    return value.strip()
+
+
+def _positive_integer(raw: dict[str, Any], key: str, default: int | None = None) -> int:
+    value = raw.get(key, default) if default is not None else raw[key]
     if not isinstance(value, int) or isinstance(value, bool) or value < 1:
         raise ConfigError(f"{key} must be a positive integer")
     return value

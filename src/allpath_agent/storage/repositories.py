@@ -134,6 +134,7 @@ class RoutingDecisionRepository:
         model: str,
         reason: str,
         complexity_score: int,
+        provider: str = "default",
     ) -> int:
         if complexity_score < 0:
             raise ValueError("complexity score cannot be negative")
@@ -141,10 +142,20 @@ class RoutingDecisionRepository:
             cursor = connection.execute(
                 """
                 INSERT INTO routing_decisions(
-                    session_id, task_id, profile, model, reason, complexity_score, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    session_id, task_id, profile, model, reason,
+                    complexity_score, created_at, provider
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, task_id, profile, model, reason, complexity_score, utc_now()),
+                (
+                    session_id,
+                    task_id,
+                    profile,
+                    model,
+                    reason,
+                    complexity_score,
+                    utc_now(),
+                    provider,
+                ),
             )
         return cursor.lastrowid
 

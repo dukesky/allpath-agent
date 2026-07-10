@@ -65,6 +65,7 @@ class AgentApplication:
             decision.profile.model,
             decision.reason,
             signals.complexity(),
+            provider=decision.profile.provider,
         )
         result = self._loop.run(
             session_id,

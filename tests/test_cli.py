@@ -22,6 +22,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def run_cli(home: Path, input_text: str = "", *arguments: str) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
+    environment.pop("OPENAI_API_KEY", None)
+    environment.pop("ANTHROPIC_API_KEY", None)
     environment["PYTHONPATH"] = str(ROOT / "src")
     return subprocess.run(
         [
@@ -136,6 +138,17 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertEqual(listed.returncode, 0, listed.stderr)
         self.assertIn(session_id, listed.stdout)
         self.assertIn("hello", listed.stdout)
+
+    def test_providers_command_shows_protocol_and_auth_status(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            initialized = run_cli(home, "", "init")
+            providers = run_cli(home, "", "providers")
+        self.assertEqual(initialized.returncode, 0, initialized.stderr)
+        self.assertEqual(providers.returncode, 0, providers.stderr)
+        self.assertIn("openai", providers.stdout)
+        self.assertIn("anthropic_messages", providers.stdout)
+        self.assertIn("missing", providers.stdout)
 
 
 class CliInterruptTestCase(unittest.TestCase):

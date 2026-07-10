@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from allpath_agent.agent import AgentLoop
 from allpath_agent.application import AgentApplication, demo_profiles
-from allpath_agent.config import ConfigError, load_config, resolve_home, write_default_config
+from allpath_agent.config import AppConfig, ConfigError, load_config, resolve_home, write_default_config
 from allpath_agent.curriculum import CurriculumEngine, CurriculumService, default_capabilities
-from allpath_agent.models import DemoProvider, ModelRouter, OpenAICompatibleProvider, ProviderError
+from allpath_agent.models import DemoProvider, ModelRouter, ProviderError, ProviderPool
+from allpath_agent.provider_runtime import (
+    available_provider_ids,
+    build_provider_pool,
+    provider_statuses,
+)
 from allpath_agent.storage import (
     CapabilityProgressRepository,
     CapabilitySuggestionRepository,
@@ -40,6 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("init", help="Create a starter configuration file")
     sessions = subparsers.add_parser("sessions", help="List recent sessions")
     sessions.add_argument("--limit", type=int, default=20)
+    subparsers.add_parser("providers", help="Show configured model providers and auth status")
     return parser
 
 
@@ -49,6 +54,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "init":
             return _initialize(home)
+        if args.command == "providers":
+            return _show_providers(load_config(home / "config.toml"), print)
         database = Database(home / "state.db")
         database.initialize()
         if args.command == "sessions":
@@ -66,7 +73,7 @@ def _initialize(home: Path) -> int:
     config_path = home / "config.toml"
     write_default_config(config_path)
     print(f"Created {config_path}")
-    print("Edit the provider URL and model names, then set the configured API key environment variable.")
+    print("Edit provider settings and model names, then set the configured API key variables.")
     print("You can run 'allpath-agent --demo' immediately without an API key.")
     return 0
 
@@ -181,23 +188,16 @@ def _build_application(
     output: Output,
 ) -> AgentApplication:
     if demo:
-        provider = DemoProvider()
+        provider = ProviderPool.single(DemoProvider())
         profiles = demo_profiles()
         system_prompt = "You are Allpath Agent running in deterministic offline demo mode."
         max_model_calls = 12
         advanced_threshold = 6
     else:
         config = load_config(home / "config.toml")
-        if config.provider.base_url == "https://api.example.com/v1" or any(
-            profile.model.startswith("replace-with-") for profile in config.models
-        ):
-            raise ConfigError("config.toml still contains placeholder provider or model values")
-        api_key = os.environ.get(config.provider.api_key_env)
-        if not api_key:
-            raise ConfigError(
-                f"required API key environment variable is not set: {config.provider.api_key_env}"
-            )
-        provider = OpenAICompatibleProvider(config.provider.base_url, api_key)
+        if any(profile.model.startswith("replace-with-") for profile in config.models):
+            raise ConfigError("config.toml still contains placeholder model values")
+        provider = build_provider_pool(config)
         profiles = config.models
         system_prompt = config.agent.system_prompt
         max_model_calls = config.agent.max_model_calls
@@ -246,6 +246,21 @@ def _list_sessions(sessions: SessionRepository, limit: int, output: Output) -> i
     for session in records:
         title = session.title or "Untitled"
         output(f"{session.id}  {session.updated_at}  {title}")
+    return 0
+
+
+def _show_providers(config: AppConfig, output: Output) -> int:
+    for status in provider_statuses(config):
+        if status.auth == "external_cli":
+            state = "available" if status.connected else "missing"
+        else:
+            state = "connected" if status.connected else "missing"
+        profiles = ",".join(status.model_profiles) or "unused"
+        output(
+            f"{status.id:<16} {state:<10} {status.protocol:<26} "
+            f"profiles={profiles}  {status.detail}"
+        )
+    output(f"Built-in provider types: {', '.join(available_provider_ids())}")
     return 0
 
 

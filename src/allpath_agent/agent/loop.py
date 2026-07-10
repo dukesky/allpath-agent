@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from allpath_agent.models.messages import ChatMessage, ChatRequest, ToolCall
+from allpath_agent.models.pool import ProviderPool
 from allpath_agent.models.provider import ChatProvider
 from allpath_agent.models.router import ModelProfile
 from allpath_agent.storage import MessageRepository, ToolExecutionRepository
@@ -27,7 +28,7 @@ class AgentResult:
 class AgentLoop:
     def __init__(
         self,
-        provider: ChatProvider,
+        provider: ChatProvider | ProviderPool,
         messages: MessageRepository,
         tool_executions: ToolExecutionRepository,
         tool_executor: ToolExecutor,
@@ -35,7 +36,7 @@ class AgentLoop:
     ):
         if max_model_calls < 1:
             raise ValueError("max_model_calls must be positive")
-        self._provider = provider
+        self._providers = provider if isinstance(provider, ProviderPool) else ProviderPool.single(provider)
         self._messages = messages
         self._tool_executions = tool_executions
         self._tool_executor = tool_executor
@@ -61,7 +62,7 @@ class AgentLoop:
                 messages=(ChatMessage("system", system_prompt), *self._history(session_id)),
                 tools=available_tools if model_profile.supports_tools else (),
             )
-            response = self._provider.complete(request)
+            response = self._providers.complete(model_profile.provider, request)
             model_calls += 1
 
             if response.tool_calls:

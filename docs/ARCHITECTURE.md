@@ -36,6 +36,8 @@ Owns message ordering, model calls, tool execution, interruption boundaries, and
 
 First filters models by hard requirements, then ranks eligible profiles by task complexity, expected quality, cost policy, and user preference. A task pins its selected model. Escalation is monotonic for the remainder of that task.
 
+Each model profile also names a provider. The Provider Pool resolves that binding to an adapter for OpenAI-compatible Chat Completions, native Anthropic Messages, or a constrained external CLI. Provider authentication remains outside the Agent Loop, and routing decisions persist both model and provider IDs.
+
 ### Tool registry
 
 Tools provide stable schemas and handlers. Schemas are sorted by tool name so repeated requests remain byte-stable. Arguments are validated locally before a handler runs. Read-only tools execute directly, while side-effecting tools pass through an approval handler and persist the allowed or denied decision. The initial core remains deliberately small. External integrations are registered as connectors rather than added directly to the loop.
@@ -56,7 +58,7 @@ SQLite stores sessions, messages, tool executions, model decisions, workflow run
 
 The system prompt and tool schemas remain byte-stable during a conversation. Curriculum progress is not rewritten into the system prompt. Relevant state enters at turn boundaries through compact application context or explicit tool results.
 
-Switching models generally loses provider-side prefix-cache reuse. The router therefore selects once per task and only escalates when necessary.
+Switching models or providers generally loses provider-side prefix-cache reuse. The router therefore selects once per task and only escalates when necessary.
 
 ## Planned package layout
 

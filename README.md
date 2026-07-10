@@ -58,7 +58,7 @@ The core owns conversation state, model calls, tool execution, persistence, inte
 The first locally runnable MVP includes:
 
 - a terminal chat interface;
-- an OpenAI-compatible model provider;
+- multiple model providers, including OpenAI-compatible APIs, native Anthropic, local endpoints, and Claude Code account auth;
 - configurable `fast` and `advanced` model profiles;
 - a synchronous model/tool conversation loop;
 - a small stable tool registry;
@@ -108,7 +108,7 @@ Requirements:
 
 - Python 3.11 or newer
 - A virtual environment
-- An API key and endpoint for an OpenAI-compatible model provider once model execution is implemented
+- Credentials for at least one configured live provider, or an authenticated Claude Code installation
 
 ```bash
 cd /Users/tianzhang/Projects/allpath-agent
@@ -152,6 +152,7 @@ allpath-agent
 Useful commands:
 
 ```bash
+allpath-agent providers
 allpath-agent sessions
 allpath-agent --session <session-id> --demo
 allpath-agent --help
@@ -163,15 +164,24 @@ Inside chat, use `/new`, `/sessions`, `/resume <session-id>`, `/capabilities`, `
 
 Behavioral settings live in `~/.allpath-agent/config.toml`. Secrets such as API keys are loaded from the environment and are never written into conversation history or SQLite message content.
 
-Planned model configuration:
+Each model profile names the provider that executes it. This allows cheap tasks and advanced tasks to use different vendors:
 
 ```toml
-[provider]
-base_url = "https://provider.example/v1"
-api_key_env = "ALLPATH_API_KEY"
+[providers.openai]
+protocol = "openai_chat_completions"
+auth = "api_key"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+
+[providers.anthropic]
+protocol = "anthropic_messages"
+auth = "api_key"
+base_url = "https://api.anthropic.com"
+api_key_env = "ANTHROPIC_API_KEY"
 
 [models.fast]
-model = "fast-model"
+provider = "openai"
+model = "gpt-4.1-mini"
 quality = 4
 cost = 1
 supports_tools = true
@@ -179,7 +189,8 @@ supports_vision = false
 max_context_tokens = 32000
 
 [models.advanced]
-model = "advanced-model"
+provider = "anthropic"
+model = "claude-sonnet-4-5"
 quality = 10
 cost = 8
 supports_tools = true
@@ -191,6 +202,7 @@ max_context_tokens = 128000
 
 - [Product design](docs/PRODUCT_DESIGN.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Model providers and authentication](docs/PROVIDERS.md)
 - [MVP implementation plan](docs/MVP_PLAN.md)
 - [Validation strategy](docs/VALIDATION.md)
 - [Change log](CHANGELOG.md)

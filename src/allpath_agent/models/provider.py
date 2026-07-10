@@ -25,14 +25,14 @@ class OpenAICompatibleProvider:
     def __init__(
         self,
         base_url: str,
-        api_key: str,
+        api_key: str = "",
         timeout_seconds: float = 60,
         transport: Transport | None = None,
     ):
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout_seconds = timeout_seconds
-        self._transport = transport or _url_transport
+        self._transport = transport or json_http_transport
 
     def complete(self, request: ChatRequest) -> ChatResponse:
         payload: dict[str, Any] = {
@@ -42,10 +42,9 @@ class OpenAICompatibleProvider:
         if request.tools:
             payload["tools"] = list(request.tools)
 
-        headers = {
-            "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
         response = self._transport(
             f"{self._base_url}/chat/completions",
             headers,
@@ -159,7 +158,7 @@ def _parse_response(payload: dict[str, Any]) -> ChatResponse:
     )
 
 
-def _url_transport(
+def json_http_transport(
     url: str,
     headers: dict[str, str],
     payload: dict[str, Any],

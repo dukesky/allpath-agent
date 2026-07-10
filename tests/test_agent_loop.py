@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from allpath_agent.agent import AgentLoop, ChatResponse, IterationLimitError, ToolCall
-from allpath_agent.models import FakeProvider, ModelProfile
+from allpath_agent.models import FakeProvider, ModelProfile, ProviderPool
 from allpath_agent.storage import (
     Database,
     MemoryRepository,
@@ -89,6 +89,35 @@ class AgentLoopTestCase(unittest.TestCase):
         )
 
         self.assertEqual(provider.requests[0].tools, ())
+
+    def test_model_profile_routes_to_its_provider(self) -> None:
+        fast_provider = FakeProvider([])
+        advanced_provider = FakeProvider([ChatResponse(content="advanced response")])
+        loop = AgentLoop(
+            ProviderPool({"fast-api": fast_provider, "claude-api": advanced_provider}),
+            self.messages,
+            self.executions,
+            MappingToolExecutor({}),
+        )
+        profile = ModelProfile(
+            "advanced",
+            "claude-model",
+            quality=10,
+            cost=8,
+            provider="claude-api",
+        )
+
+        result = loop.run(
+            self.session.id,
+            "task-multi-provider",
+            "Analyze this",
+            "You are helpful.",
+            profile,
+        )
+
+        self.assertEqual(result.content, "advanced response")
+        self.assertEqual(fast_provider.requests, [])
+        self.assertEqual(len(advanced_provider.requests), 1)
 
     def test_executes_tool_and_reconstructs_valid_history(self) -> None:
         provider = FakeProvider(

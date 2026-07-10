@@ -12,6 +12,7 @@ class ModelProfile:
     supports_tools: bool = True
     supports_vision: bool = False
     max_context_tokens: int = 32_000
+    provider: str = "default"
 
 
 @dataclass(frozen=True)

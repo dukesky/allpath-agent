@@ -65,7 +65,7 @@ The first useful release includes:
 
 - one local chat surface;
 - SQLite sessions and user memory;
-- an OpenAI-compatible model provider interface;
+- a provider-neutral model interface with OpenAI-compatible, native Anthropic, local, and account-auth adapters;
 - `fast` and `advanced` model profiles;
 - web lookup, memory, and one local utility tool;
 - eight curriculum capabilities;

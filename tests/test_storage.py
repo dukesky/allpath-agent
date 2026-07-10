@@ -30,7 +30,7 @@ class StorageTestCase(unittest.TestCase):
             versions = connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
             ).fetchall()
-        self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4])
+        self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5])
 
     def test_session_messages_and_routing_are_persisted(self) -> None:
         sessions = SessionRepository(self.database)
@@ -40,10 +40,19 @@ class StorageTestCase(unittest.TestCase):
 
         messages.append(session.id, "user", "Hello")
         messages.append(session.id, "assistant", "Hi there")
-        routing.record(session.id, "task-1", "fast", "fast-model", "simple task", 1)
+        routing.record(
+            session.id,
+            "task-1",
+            "fast",
+            "fast-model",
+            "simple task",
+            1,
+            provider="openai",
+        )
 
         self.assertEqual([message.role for message in messages.list_for_session(session.id)], ["user", "assistant"])
         self.assertEqual(routing.list_for_task(session.id, "task-1")[0]["profile"], "fast")
+        self.assertEqual(routing.list_for_task(session.id, "task-1")[0]["provider"], "openai")
         self.assertEqual(sessions.get(session.id).title, "First conversation")
 
     def test_session_title_can_be_updated(self) -> None:

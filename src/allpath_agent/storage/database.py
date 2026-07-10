@@ -136,6 +136,12 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             "CREATE INDEX capability_suggestions_capability ON capability_suggestions(capability_id)",
         ),
     ),
+    (
+        5,
+        (
+            "ALTER TABLE routing_decisions ADD COLUMN provider TEXT NOT NULL DEFAULT 'default'",
+        ),
+    ),
 )
 
 

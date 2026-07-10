@@ -52,6 +52,14 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added cross-session suggestion cooldowns, automatic succeeded/habitual progression, and durable dismissal.
 - Added post-response CLI capability tips plus `/capabilities` and `/dismiss` commands.
 - Kept curriculum state outside the system prompt so progressive learning does not invalidate conversation prompt caches.
+- Added a provider catalog with explicit protocol and authentication contracts.
+- Added per-model provider bindings and a provider pool so fast and advanced profiles can use different vendors.
+- Added native Anthropic Messages API support alongside OpenAI-compatible API support.
+- Added no-auth OpenAI-compatible endpoints for local providers such as Ollama.
+- Added a Claude Code external provider that reuses an authenticated app session without copying private tokens.
+- Added `allpath-agent providers` for safe provider and credential readiness checks.
+- Added provider IDs to persisted routing decisions and retained compatibility with legacy single-provider configuration.
+- Added multi-provider, native Anthropic, external CLI, status, configuration, and persistence tests.
 
 ### Changed
 

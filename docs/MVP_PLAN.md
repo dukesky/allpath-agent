@@ -83,10 +83,12 @@ Status: complete.
 
 ### Milestone 2: Provider and agent loop
 
-Status: complete for the synchronous non-streaming loop; real-provider smoke testing remains deferred until configuration and CLI milestones.
+Status: complete for the synchronous non-streaming loop, multi-provider dispatch, and provider adapter tests; real-provider smoke testing remains deferred.
 
 - Define a provider-neutral chat interface.
 - Implement an OpenAI-compatible provider.
+- Implement native Anthropic and constrained external-CLI providers.
+- Bind model profiles to providers through a provider pool.
 - Implement strict message and tool-call lifecycle handling.
 - Add deterministic fake-provider integration tests.
 
@@ -100,7 +102,7 @@ Status: complete for the core runtime; the interactive terminal approval prompt 
 
 ### Milestone 4: Local CLI
 
-Status: complete for local demo and OpenAI-compatible live mode. The real-provider smoke test remains before the MVP release.
+Status: complete for local demo, multi-provider live mode, provider status inspection, and legacy configuration compatibility. The real-provider smoke test remains before the MVP release.
 
 - Add configuration loading and validation.
 - Build the terminal conversation interface.
@@ -115,6 +117,8 @@ Status: complete with eight implemented capabilities, persistent evidence, one s
 - Add post-task contextual recommendations and cooldowns.
 
 ### Milestone 6: MVP hardening
+
+Status: multi-provider foundations are complete; budgets, logs, failure recovery, and real-provider smoke tests remain.
 
 - Add iteration and token budgets.
 - Add structured local logs.

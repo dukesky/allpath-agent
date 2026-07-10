@@ -82,6 +82,10 @@ Real API tests are intentionally separate from default CI because they require s
 ### Milestone 2: Provider and Agent Loop
 
 - OpenAI-compatible payload serialization and response parsing.
+- Native Anthropic message, tool, and usage conversion.
+- Per-profile dispatch to different providers through the Provider Pool.
+- Claude Code external-command construction without credential extraction.
+- Provider status checks that never reveal secret values.
 - Deterministic fake-provider conversations.
 - Assistant tool-call and tool-result history reconstruction.
 - Structured tool failures.

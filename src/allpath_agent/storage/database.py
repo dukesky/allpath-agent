@@ -115,6 +115,27 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             "CREATE INDEX tool_approvals_session_task ON tool_approvals(session_id, task_id)",
         ),
     ),
+    (
+        4,
+        (
+            """
+            CREATE TABLE curriculum_sessions (
+                session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+                started_at TEXT NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE capability_suggestions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id) ON DELETE CASCADE,
+                capability_id TEXT NOT NULL,
+                message TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX capability_suggestions_capability ON capability_suggestions(capability_id)",
+        ),
+    ),
 )
 
 

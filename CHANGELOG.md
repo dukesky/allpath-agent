@@ -46,6 +46,12 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Changed explicit deep-analysis requests to route directly to the advanced model profile.
 - Prevented tool schemas from being sent to model profiles that do not support tool calling.
 - Added an installed-console-entrypoint smoke test to every GitHub Actions Python job.
+- Added an eight-capability curriculum covering chat, memory, time, calculation, sessions, model routing, approvals, and live providers.
+- Added persistent curriculum-session and capability-suggestion records with one suggestion enforced per session.
+- Added real behavior evidence from successful tools, advanced routing, approvals, session commands, and live-provider use.
+- Added cross-session suggestion cooldowns, automatic succeeded/habitual progression, and durable dismissal.
+- Added post-response CLI capability tips plus `/capabilities` and `/dismiss` commands.
+- Kept curriculum state outside the system prompt so progressive learning does not invalidate conversation prompt caches.
 
 ### Changed
 

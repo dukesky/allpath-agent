@@ -108,6 +108,8 @@ Status: complete for local demo and OpenAI-compatible live mode. The real-provid
 
 ### Milestone 5: Curriculum integration
 
+Status: complete with eight implemented capabilities, persistent evidence, one suggestion per session, cooldowns, dismissal, and CLI progress inspection.
+
 - Define the first eight capability records.
 - Convert successful actions into learning evidence.
 - Add post-task contextual recommendations and cooldowns.

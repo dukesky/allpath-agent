@@ -8,7 +8,7 @@ The project is inspired by architectural lessons from Hermes Agent, but it is an
 
 ## Project status
 
-**Current phase:** Locally runnable MVP — persistence, routing, Agent Loop, tools, approvals, configuration, and terminal sessions are implemented.
+**Current phase:** Locally runnable MVP — persistence, routing, Agent Loop, tools, approvals, terminal sessions, and progressive capability learning are implemented.
 
 The first release target is a testable local agent, not a production multi-platform system. A successful MVP must let a user start the agent locally, hold a multi-turn conversation, invoke a small set of tools, persist sessions, and observe model-routing and capability-learning decisions.
 
@@ -29,6 +29,8 @@ See [MVP plan](docs/MVP_PLAN.md) for the acceptance criteria and implementation 
 ### Progressive capability discovery
 
 The agent maintains a curriculum of its own capabilities. It tracks whether each capability is locked, eligible, offered, tried, successful, habitual, or dismissed. After completing a task, it may recommend one relevant capability without interrupting the user's work.
+
+The current curriculum contains eight implemented capabilities. Suggestions appear only after the current answer, at most once per session. Recent suggestions receive a cross-session cooldown, successful actions advance progress automatically, and `/dismiss` suppresses unwanted lessons.
 
 Examples:
 
@@ -155,7 +157,7 @@ allpath-agent --session <session-id> --demo
 allpath-agent --help
 ```
 
-Inside chat, use `/new`, `/sessions`, `/resume <session-id>`, `/help`, or `/exit`.
+Inside chat, use `/new`, `/sessions`, `/resume <session-id>`, `/capabilities`, `/dismiss`, `/help`, or `/exit`.
 
 ## Configuration direction
 

@@ -9,7 +9,12 @@ import unittest
 from pathlib import Path
 
 from allpath_agent.cli.main import _chat
-from allpath_agent.storage import Database, MemoryRepository, MessageRepository
+from allpath_agent.storage import (
+    CapabilityProgressRepository,
+    Database,
+    MemoryRepository,
+    MessageRepository,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,13 +63,19 @@ class CliEndToEndTestCase(unittest.TestCase):
             self.assertEqual(second.returncode, 0, second.stderr)
             messages = MessageRepository(Database(home / "state.db")).list_for_session(session_id)
             self.assertEqual([message.role for message in messages], ["user", "assistant", "user", "assistant"])
+            self.assertEqual(first.stdout.count("Tip ["), 1)
+            self.assertEqual(second.stdout.count("Tip ["), 0)
 
     def test_demo_time_tool_runs_end_to_end(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            result = run_cli(Path(directory), "what time is it?\n/exit\n", "--demo")
+            home = Path(directory)
+            result = run_cli(home, "what time is it?\n/exit\n", "--demo")
+            progress = CapabilityProgressRepository(Database(home / "state.db"))
+            current_time_status = progress.get("current_time").status
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Demo tool result", result.stdout)
         self.assertIn("UTC", result.stdout)
+        self.assertEqual(current_time_status, "succeeded")
 
     def test_complex_demo_task_routes_to_advanced_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -85,6 +96,23 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertIn("Approval required: memory_set", result.stdout)
         self.assertIsNotNone(memory)
         self.assertEqual(memory.content, "concise answers")
+
+    def test_capability_suggestion_can_be_dismissed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            result = run_cli(home, "hello\n/dismiss\n/exit\n", "--demo")
+            progress = CapabilityProgressRepository(Database(home / "state.db")).list_all()
+            dismissed = [record for record in progress.values() if record.status == "dismissed"]
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Capability suggestion dismissed.", result.stdout)
+        self.assertEqual(len(dismissed), 1)
+
+    def test_capabilities_command_lists_curriculum_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = run_cli(Path(directory), "/capabilities\n/exit\n", "--demo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("basic_chat", result.stdout)
+        self.assertIn("live_provider", result.stdout)
 
     def test_init_and_missing_live_config_errors(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

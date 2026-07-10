@@ -110,6 +110,8 @@ Real API tests are intentionally separate from default CI because they require s
 - Real successful actions advance learning state.
 - Current work completes before a lesson is suggested.
 
+The default suite now validates all of these behaviors against temporary SQLite databases and through the real CLI subprocess.
+
 ## Supported environments
 
 CI validates Python 3.11, 3.12, and 3.13 on Linux. Local macOS validation is performed during development. Additional operating systems can be added when platform-specific behavior enters the MVP.

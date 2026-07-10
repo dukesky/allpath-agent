@@ -253,6 +253,63 @@ class CapabilityProgressRepository:
         records = [CapabilityProgressRecord(**dict(row)) for row in rows]
         return {record.capability_id: record for record in records}
 
+    def get(self, capability_id: str) -> CapabilityProgressRecord | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM capability_progress WHERE capability_id = ?",
+                (capability_id,),
+            ).fetchone()
+        return CapabilityProgressRecord(**dict(row)) if row else None
+
+
+class CurriculumSessionRepository:
+    def __init__(self, database: Database):
+        self._database = database
+
+    def start_once(self, session_id: str) -> bool:
+        with self._database.connect() as connection, connection:
+            cursor = connection.execute(
+                "INSERT OR IGNORE INTO curriculum_sessions(session_id, started_at) VALUES (?, ?)",
+                (session_id, utc_now()),
+            )
+            if cursor.rowcount != 1:
+                return False
+            connection.execute(
+                """
+                UPDATE capability_progress
+                SET sessions_since_offer = sessions_since_offer + 1,
+                    updated_at = ?
+                WHERE sessions_since_offer IS NOT NULL
+                """,
+                (utc_now(),),
+            )
+        return True
+
+
+class CapabilitySuggestionRepository:
+    def __init__(self, database: Database):
+        self._database = database
+
+    def record(self, session_id: str, capability_id: str, message: str) -> int:
+        with self._database.connect() as connection, connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO capability_suggestions(
+                    session_id, capability_id, message, created_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (session_id, capability_id, message, utc_now()),
+            )
+        return cursor.lastrowid
+
+    def get_for_session(self, session_id: str) -> dict[str, Any] | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM capability_suggestions WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
 
 class ToolExecutionRepository:
     def __init__(self, database: Database):
@@ -303,6 +360,25 @@ class ToolExecutionRepository:
         result["arguments"] = json.loads(result.pop("arguments_json"))
         result["result"] = json.loads(result.pop("result_json")) if result["result_json"] else None
         return result
+
+    def list_for_task(self, session_id: str, task_id: str) -> list[dict[str, Any]]:
+        with self._database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM tool_executions
+                WHERE session_id = ? AND task_id = ?
+                ORDER BY id
+                """,
+                (session_id, task_id),
+            ).fetchall()
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            record = dict(row)
+            record["arguments"] = json.loads(record.pop("arguments_json"))
+            result_json = record.pop("result_json")
+            record["result"] = json.loads(result_json) if result_json else None
+            records.append(record)
+        return records
 
 
 class ToolApprovalRepository:

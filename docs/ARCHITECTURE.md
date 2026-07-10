@@ -42,7 +42,7 @@ Tools provide stable schemas and handlers. Schemas are sorted by tool name so re
 
 ### Capability curriculum
 
-Owns capability definitions and user learning state. It proposes lessons but cannot claim a setup succeeded. Success requires evidence emitted by a tool, connector, or verifier.
+Owns capability definitions and user learning state. It proposes lessons but cannot claim a setup succeeded. Success requires evidence emitted by a tool, routing decision, approval, session action, connector, or verifier. Suggestions are persisted separately from conversation messages, appear after the current task, and are limited to one per session. Curriculum state never mutates the system prompt.
 
 ### Setup workflow engine
 

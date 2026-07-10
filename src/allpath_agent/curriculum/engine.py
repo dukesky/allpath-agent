@@ -22,6 +22,7 @@ class Capability:
     prerequisite_ids: tuple[str, ...] = ()
     trigger_intents: frozenset[str] = field(default_factory=frozenset)
     setup_effort: int = 0
+    lesson: str = ""
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,12 @@ class CapabilityProgress:
 class CurriculumEngine:
     def __init__(self, capabilities: list[Capability]):
         self._capabilities = {capability.id: capability for capability in capabilities}
+
+    def capabilities(self) -> tuple[Capability, ...]:
+        return tuple(self._capabilities[capability_id] for capability_id in sorted(self._capabilities))
+
+    def has_capability(self, capability_id: str) -> bool:
+        return capability_id in self._capabilities
 
     def recommend(
         self,
@@ -56,6 +63,13 @@ class CurriculumEngine:
                 LearningStatus.HABITUAL,
                 LearningStatus.DISMISSED,
             }:
+                continue
+            if (
+                state
+                and state.status in {LearningStatus.OFFERED, LearningStatus.TRIED}
+                and state.sessions_since_offer is not None
+                and state.sessions_since_offer < 2
+            ):
                 continue
             if not set(capability.prerequisite_ids).issubset(completed):
                 continue

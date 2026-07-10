@@ -9,8 +9,12 @@ from pathlib import Path
 from allpath_agent.agent import AgentLoop
 from allpath_agent.application import AgentApplication, demo_profiles
 from allpath_agent.config import ConfigError, load_config, resolve_home, write_default_config
+from allpath_agent.curriculum import CurriculumEngine, CurriculumService, default_capabilities
 from allpath_agent.models import DemoProvider, ModelRouter, OpenAICompatibleProvider, ProviderError
 from allpath_agent.storage import (
+    CapabilityProgressRepository,
+    CapabilitySuggestionRepository,
+    CurriculumSessionRepository,
     Database,
     MemoryRepository,
     MessageRepository,
@@ -86,6 +90,9 @@ def _chat(
         session = sessions.create()
 
     application = _build_application(home, database, demo, input_fn, output)
+    application.start_session(session.id)
+    if requested_session_id:
+        application.record_capability_success("session_management")
     mode = "demo" if demo else "live"
     output(f"Allpath Agent ({mode} mode)")
     output(f"Session: {session.id}")
@@ -110,14 +117,20 @@ def _chat(
             output("Goodbye.")
             return 0
         if user_message == "/help":
-            output("Commands: /help, /new, /sessions, /resume <session-id>, /exit")
+            output(
+                "Commands: /help, /new, /sessions, /resume <session-id>, "
+                "/capabilities, /dismiss [capability-id], /exit"
+            )
             continue
         if user_message == "/new":
             active_session_id = sessions.create().id
+            application.start_session(active_session_id)
+            application.record_capability_success("session_management")
             output(f"New session: {active_session_id}")
             continue
         if user_message == "/sessions":
             _list_sessions(sessions, 20, output)
+            application.record_capability_success("session_management")
             continue
         if user_message.startswith("/resume "):
             candidate_id = user_message.removeprefix("/resume ").strip()
@@ -125,7 +138,20 @@ def _chat(
                 error_output(f"Session does not exist: {candidate_id}")
             else:
                 active_session_id = candidate_id
+                application.start_session(active_session_id)
+                application.record_capability_success("session_management")
                 output(f"Resumed session: {active_session_id}")
+            continue
+        if user_message == "/capabilities":
+            for capability_id, title, status in application.capability_progress():
+                output(f"{capability_id:<20} {status:<10} {title}")
+            continue
+        if user_message == "/dismiss" or user_message.startswith("/dismiss "):
+            capability_id = user_message.removeprefix("/dismiss").strip() or None
+            if application.dismiss_suggestion(active_session_id, capability_id):
+                output("Capability suggestion dismissed.")
+            else:
+                error_output("No capability suggestion found to dismiss.")
             continue
 
         try:
@@ -143,6 +169,8 @@ def _chat(
             error_output(f"Task failed: {error}")
             continue
         output(f"Agent [{result.agent.model_profile}]> {result.agent.content}")
+        if result.suggestion:
+            output(f"Tip [{result.suggestion.capability_id}]: {result.suggestion.message}")
 
 
 def _build_application(
@@ -177,6 +205,7 @@ def _build_application(
 
     memories = MemoryRepository(database)
     approvals = ToolApprovalRepository(database)
+    tool_executions = ToolExecutionRepository(database)
     runtime = ToolRuntime(
         create_builtin_registry(memories),
         approvals,
@@ -185,15 +214,25 @@ def _build_application(
     loop = AgentLoop(
         provider,
         MessageRepository(database),
-        ToolExecutionRepository(database),
+        tool_executions,
         runtime,
         max_model_calls=max_model_calls,
+    )
+    curriculum = CurriculumService(
+        CurriculumEngine(default_capabilities()),
+        CapabilityProgressRepository(database),
+        CapabilitySuggestionRepository(database),
+        CurriculumSessionRepository(database),
     )
     return AgentApplication(
         loop,
         ModelRouter(list(profiles), advanced_threshold=advanced_threshold),
         RoutingDecisionRepository(database),
+        tool_executions,
+        approvals,
+        curriculum,
         system_prompt,
+        live_provider=not demo,
     )
 
 

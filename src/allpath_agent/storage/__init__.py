@@ -6,6 +6,7 @@ from .repositories import (
     MessageRepository,
     RoutingDecisionRepository,
     SessionRepository,
+    ToolApprovalRepository,
     ToolExecutionRepository,
 )
 
@@ -20,5 +21,6 @@ __all__ = [
     "RoutingDecisionRepository",
     "SessionRecord",
     "SessionRepository",
+    "ToolApprovalRepository",
     "ToolExecutionRepository",
 ]

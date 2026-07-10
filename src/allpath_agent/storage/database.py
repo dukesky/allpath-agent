@@ -97,6 +97,24 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             "ALTER TABLE messages ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}'",
         ),
     ),
+    (
+        3,
+        (
+            """
+            CREATE TABLE tool_approvals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                task_id TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                arguments_json TEXT NOT NULL,
+                decision TEXT NOT NULL CHECK (decision IN ('allowed', 'denied')),
+                reason TEXT,
+                created_at TEXT NOT NULL
+            )
+            """,
+            "CREATE INDEX tool_approvals_session_task ON tool_approvals(session_id, task_id)",
+        ),
+    ),
 )
 
 

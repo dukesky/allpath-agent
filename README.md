@@ -8,7 +8,7 @@ The project is inspired by architectural lessons from Hermes Agent, but it is an
 
 ## Project status
 
-**Current phase:** MVP core implementation — persistence and the first Agent Loop are complete.
+**Current phase:** MVP core implementation — persistence, Agent Loop, tool registry, and approval policy are complete.
 
 The first release target is a testable local agent, not a production multi-platform system. A successful MVP must let a user start the agent locally, hold a multi-turn conversation, invoke a small set of tools, persist sessions, and observe model-routing and capability-learning decisions.
 

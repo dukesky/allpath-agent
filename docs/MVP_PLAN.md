@@ -92,6 +92,8 @@ Status: complete for the synchronous non-streaming loop; real-provider smoke tes
 
 ### Milestone 3: Tools and approvals
 
+Status: complete for the core runtime; the interactive terminal approval prompt belongs to Milestone 4.
+
 - Build the tool registry and argument validation.
 - Add the first three tools.
 - Add approval policy and structured tool failures.

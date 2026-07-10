@@ -290,3 +290,56 @@ class ToolExecutionRepository:
         result["arguments"] = json.loads(result.pop("arguments_json"))
         result["result"] = json.loads(result.pop("result_json")) if result["result_json"] else None
         return result
+
+
+class ToolApprovalRepository:
+    def __init__(self, database: Database):
+        self._database = database
+
+    def record(
+        self,
+        session_id: str,
+        task_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        decision: str,
+        reason: str | None = None,
+    ) -> int:
+        if decision not in {"allowed", "denied"}:
+            raise ValueError(f"invalid approval decision: {decision}")
+        with self._database.connect() as connection, connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO tool_approvals(
+                    session_id, task_id, tool_name, arguments_json,
+                    decision, reason, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    task_id,
+                    tool_name,
+                    _json(arguments),
+                    decision,
+                    reason,
+                    utc_now(),
+                ),
+            )
+        return cursor.lastrowid
+
+    def list_for_task(self, session_id: str, task_id: str) -> list[dict[str, Any]]:
+        with self._database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM tool_approvals
+                WHERE session_id = ? AND task_id = ?
+                ORDER BY id
+                """,
+                (session_id, task_id),
+            ).fetchall()
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            record = dict(row)
+            record["arguments"] = json.loads(record.pop("arguments_json"))
+            records.append(record)
+        return records

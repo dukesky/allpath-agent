@@ -30,6 +30,12 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added GitHub Actions CI across Python 3.11, 3.12, and 3.13.
 - Added one shared local and CI validation command that compiles source files and runs the complete test suite.
 - Added milestone-specific validation standards covering unit, integration, E2E, and real-provider smoke tests.
+- Added a deterministic tool registry with stable alphabetic schemas for prompt-cache-friendly requests.
+- Added strict tool argument validation for required fields, unknown fields, primitive types, arrays, enums, and minimum string lengths.
+- Added read-only and side-effect risk classifications with default-deny approval handling.
+- Added persistent allowed and denied approval decisions linked to sessions and tasks.
+- Added built-in current-time, durable-memory read/write, and safe arithmetic tools.
+- Integrated registry-provided schemas, tool context, validation, and approval results into the Agent Loop.
 
 ### Changed
 

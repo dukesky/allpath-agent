@@ -2,20 +2,18 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any
 
-from allpath_agent.models.provider import ChatProvider
 from allpath_agent.models.messages import ChatMessage, ChatRequest, ToolCall
+from allpath_agent.models.provider import ChatProvider
 from allpath_agent.models.router import ModelProfile
 from allpath_agent.storage import MessageRepository, ToolExecutionRepository
 from allpath_agent.storage.records import MessageRecord
+from allpath_agent.tools import ToolContext, ToolExecutor
+
 
 class IterationLimitError(RuntimeError):
     pass
-
-
-class ToolExecutor(Protocol):
-    def execute(self, name: str, arguments: dict[str, Any]) -> Any: ...
 
 
 @dataclass(frozen=True)
@@ -50,7 +48,7 @@ class AgentLoop:
         user_message: str,
         system_prompt: str,
         model_profile: ModelProfile,
-        tool_schemas: tuple[dict[str, Any], ...] = (),
+        tool_schemas: tuple[dict[str, Any], ...] | None = None,
     ) -> AgentResult:
         self._messages.append(session_id, "user", user_message)
         model_calls = 0
@@ -60,7 +58,7 @@ class AgentLoop:
             request = ChatRequest(
                 model=model_profile.model,
                 messages=(ChatMessage("system", system_prompt), *self._history(session_id)),
-                tools=tool_schemas,
+                tools=self._tool_executor.schemas() if tool_schemas is None else tool_schemas,
             )
             response = self._provider.complete(request)
             model_calls += 1
@@ -115,7 +113,11 @@ class AgentLoop:
             tool_call.arguments,
         )
         try:
-            result = self._tool_executor.execute(tool_call.name, tool_call.arguments)
+            result = self._tool_executor.execute(
+                tool_call.name,
+                tool_call.arguments,
+                ToolContext(session_id, task_id),
+            )
         except Exception as error:
             payload = {
                 "ok": False,

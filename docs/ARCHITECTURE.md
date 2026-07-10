@@ -38,7 +38,7 @@ First filters models by hard requirements, then ranks eligible profiles by task 
 
 ### Tool registry
 
-Tools provide stable schemas and handlers. The initial core remains deliberately small. External integrations are registered as connectors rather than added directly to the loop.
+Tools provide stable schemas and handlers. Schemas are sorted by tool name so repeated requests remain byte-stable. Arguments are validated locally before a handler runs. Read-only tools execute directly, while side-effecting tools pass through an approval handler and persist the allowed or denied decision. The initial core remains deliberately small. External integrations are registered as connectors rather than added directly to the loop.
 
 ### Capability curriculum
 

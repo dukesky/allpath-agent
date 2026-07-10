@@ -7,7 +7,15 @@ from typing import Any
 
 from allpath_agent.agent import AgentLoop, ChatResponse, IterationLimitError, ToolCall
 from allpath_agent.models import FakeProvider, ModelProfile
-from allpath_agent.storage import Database, MessageRepository, SessionRepository, ToolExecutionRepository
+from allpath_agent.storage import (
+    Database,
+    MemoryRepository,
+    MessageRepository,
+    SessionRepository,
+    ToolApprovalRepository,
+    ToolExecutionRepository,
+)
+from allpath_agent.tools import ToolContext, ToolRuntime, create_builtin_registry
 
 
 class MappingToolExecutor:
@@ -15,7 +23,10 @@ class MappingToolExecutor:
         self.values = values
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
-    def execute(self, name: str, arguments: dict[str, Any]) -> Any:
+    def schemas(self) -> tuple[dict[str, Any], ...]:
+        return ()
+
+    def execute(self, name: str, arguments: dict[str, Any], context: ToolContext) -> Any:
         self.calls.append((name, arguments))
         value = self.values[name]
         if isinstance(value, Exception):
@@ -130,6 +141,43 @@ class AgentLoopTestCase(unittest.TestCase):
                 "You are helpful.",
                 self.profile,
             )
+
+    def test_registry_runtime_denies_side_effect_and_returns_result_to_model(self) -> None:
+        provider = FakeProvider(
+            [
+                ChatResponse(
+                    tool_calls=(
+                        ToolCall(
+                            "call-1",
+                            "memory_set",
+                            {"key": "style", "content": "concise"},
+                        ),
+                    )
+                ),
+                ChatResponse(content="I did not save that without approval."),
+            ]
+        )
+        memories = MemoryRepository(self.database)
+        approvals = ToolApprovalRepository(self.database)
+        runtime = ToolRuntime(create_builtin_registry(memories), approvals)
+        loop = AgentLoop(provider, self.messages, self.executions, runtime)
+
+        result = loop.run(
+            self.session.id,
+            "task-approval",
+            "Remember that I prefer concise answers",
+            "You are helpful.",
+            self.profile,
+        )
+
+        self.assertEqual(result.content, "I did not save that without approval.")
+        self.assertEqual(len(provider.requests[0].tools), 4)
+        self.assertIsNone(memories.get("style"))
+        self.assertEqual(
+            approvals.list_for_task(self.session.id, "task-approval")[0]["decision"],
+            "denied",
+        )
+        self.assertIn("ToolApprovalDenied", provider.requests[1].messages[-1].content)
 
 
 if __name__ == "__main__":

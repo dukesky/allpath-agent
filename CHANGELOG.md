@@ -36,6 +36,15 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added persistent allowed and denied approval decisions linked to sessions and tasks.
 - Added built-in current-time, durable-memory read/write, and safe arithmetic tools.
 - Integrated registry-provided schemas, tool context, validation, and approval results into the Agent Loop.
+- Added a zero-dependency TOML configuration system with separate environment-based API secrets.
+- Added an offline deterministic demo provider so the complete local Agent can run without an API account.
+- Added the `allpath-agent` terminal command with live and demo modes.
+- Added terminal approval prompts, session creation, listing, titles, resumption, and in-chat session commands.
+- Added task routing persistence and visible fast/advanced model-profile selection in the CLI.
+- Added graceful EOF and Ctrl-C handling with interrupted-turn history repair.
+- Added subprocess E2E tests for startup, chat, tools, approvals, session resume, routing, and configuration errors.
+- Changed explicit deep-analysis requests to route directly to the advanced model profile.
+- Prevented tool schemas from being sent to model profiles that do not support tool calling.
 
 ### Changed
 

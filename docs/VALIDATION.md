@@ -55,6 +55,8 @@ Once the CLI exists, launch it as a subprocess and verify:
 - invalid configuration errors;
 - a deterministic fake-provider conversation.
 
+These subprocess checks are now part of the default validation suite and run in CI.
+
 ### Real-provider smoke tests
 
 Real API tests are intentionally separate from default CI because they require secrets, cost money, and depend on external services. Before an MVP release, run a documented smoke test that verifies:

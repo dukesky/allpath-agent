@@ -28,7 +28,7 @@ class TaskSignals:
         score = min(self.estimated_tool_calls, 6)
         score += 3 if self.modifies_code_or_files else 0
         score += 4 if self.high_risk else 0
-        score += 3 if self.asks_for_deep_analysis else 0
+        score += 6 if self.asks_for_deep_analysis else 0
         score += 2 if self.context_tokens > 16_000 else 0
         return score
 

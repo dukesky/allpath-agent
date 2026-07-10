@@ -55,10 +55,11 @@ class AgentLoop:
         executed_tool_calls = 0
 
         while model_calls < self._max_model_calls:
+            available_tools = self._tool_executor.schemas() if tool_schemas is None else tool_schemas
             request = ChatRequest(
                 model=model_profile.model,
                 messages=(ChatMessage("system", system_prompt), *self._history(session_id)),
-                tools=self._tool_executor.schemas() if tool_schemas is None else tool_schemas,
+                tools=available_tools if model_profile.supports_tools else (),
             )
             response = self._provider.complete(request)
             model_calls += 1

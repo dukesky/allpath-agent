@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
@@ -64,6 +65,52 @@ class FakeProvider:
         if not self._responses:
             raise ProviderError("fake provider has no response remaining")
         return self._responses.pop(0)
+
+
+class DemoProvider:
+    def __init__(self) -> None:
+        self._tool_call_number = 0
+
+    def complete(self, request: ChatRequest) -> ChatResponse:
+        last_message = request.messages[-1]
+        if last_message.role == "tool":
+            try:
+                payload = json.loads(last_message.content or "{}")
+            except json.JSONDecodeError:
+                payload = {"ok": False, "error": {"message": "invalid tool result"}}
+            if payload.get("ok"):
+                return ChatResponse(content=f"Demo tool result: {payload.get('result')}")
+            error = payload.get("error") or {}
+            return ChatResponse(content=f"Demo tool was not completed: {error.get('message', 'unknown error')}")
+
+        content = last_message.content or ""
+        lowered = content.lower()
+        if any(phrase in lowered for phrase in ("what time", "current time", "几点", "时间")):
+            return ChatResponse(
+                tool_calls=(self._tool_call("current_datetime", {"timezone": "UTC"}),),
+                finish_reason="tool_calls",
+            )
+        if lowered.startswith("calculate "):
+            return ChatResponse(
+                tool_calls=(self._tool_call("calculate", {"expression": content[10:].strip()}),),
+                finish_reason="tool_calls",
+            )
+        if "remember" in lowered or "记住" in content:
+            remembered = re.sub(r"^.*?(remember|记住)\s*", "", content, flags=re.IGNORECASE).strip()
+            return ChatResponse(
+                tool_calls=(
+                    self._tool_call(
+                        "memory_set",
+                        {"key": "demo_note", "content": remembered or content},
+                    ),
+                ),
+                finish_reason="tool_calls",
+            )
+        return ChatResponse(content=f"Demo response: {content}")
+
+    def _tool_call(self, name: str, arguments: dict[str, Any]) -> ToolCall:
+        self._tool_call_number += 1
+        return ToolCall(f"demo-call-{self._tool_call_number}", name, arguments)
 
 
 def _serialize_message(message: ChatMessage) -> dict[str, Any]:

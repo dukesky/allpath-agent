@@ -20,6 +20,10 @@ class ModelRouterTestCase(unittest.TestCase):
         decision = ModelRouter(profiles()).route(signals)
         self.assertEqual(decision.profile.name, "advanced")
 
+    def test_explicit_deep_analysis_uses_advanced_model(self) -> None:
+        decision = ModelRouter(profiles()).route(TaskSignals(asks_for_deep_analysis=True))
+        self.assertEqual(decision.profile.name, "advanced")
+
     def test_hard_requirement_filters_models(self) -> None:
         decision = ModelRouter(profiles()).route(TaskSignals(requires_vision=True))
         self.assertEqual(decision.profile.name, "advanced")

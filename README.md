@@ -8,7 +8,7 @@ The project is inspired by architectural lessons from Hermes Agent, but it is an
 
 ## Project status
 
-**Current phase:** MVP core implementation — persistence, Agent Loop, tool registry, and approval policy are complete.
+**Current phase:** Locally runnable MVP — persistence, routing, Agent Loop, tools, approvals, configuration, and terminal sessions are implemented.
 
 The first release target is a testable local agent, not a production multi-platform system. A successful MVP must let a user start the agent locally, hold a multi-turn conversation, invoke a small set of tools, persist sessions, and observe model-routing and capability-learning decisions.
 
@@ -127,32 +127,62 @@ The underlying standard-library suite can also run directly:
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-The local run command will become:
+Run immediately in deterministic offline demo mode:
+
+```bash
+allpath-agent --demo
+```
+
+The demo requires no API key and exercises conversation, routing, tools, approvals, SQLite persistence, and session resume.
+
+Create a live-provider configuration:
+
+```bash
+allpath-agent init
+```
+
+Edit `~/.allpath-agent/config.toml`, set the configured API-key environment variable, then run:
 
 ```bash
 allpath-agent
 ```
 
-That command is part of the MVP acceptance criteria and is not implemented yet.
+Useful commands:
+
+```bash
+allpath-agent sessions
+allpath-agent --session <session-id> --demo
+allpath-agent --help
+```
+
+Inside chat, use `/new`, `/sessions`, `/resume <session-id>`, `/help`, or `/exit`.
 
 ## Configuration direction
 
-Behavioral settings will live in a local YAML configuration file. Secrets such as API keys will be loaded separately and will never be written into conversation history or SQLite message content.
+Behavioral settings live in `~/.allpath-agent/config.toml`. Secrets such as API keys are loaded from the environment and are never written into conversation history or SQLite message content.
 
 Planned model configuration:
 
-```yaml
-models:
-  fast:
-    provider: openai_compatible
-    model: example-fast-model
-  advanced:
-    provider: openai_compatible
-    model: example-advanced-model
+```toml
+[provider]
+base_url = "https://provider.example/v1"
+api_key_env = "ALLPATH_API_KEY"
 
-routing:
-  default: fast
-  allow_escalation: true
+[models.fast]
+model = "fast-model"
+quality = 4
+cost = 1
+supports_tools = true
+supports_vision = false
+max_context_tokens = 32000
+
+[models.advanced]
+model = "advanced-model"
+quality = 10
+cost = 8
+supports_tools = true
+supports_vision = true
+max_context_tokens = 128000
 ```
 
 ## Documentation

@@ -52,6 +52,19 @@ class SessionRepository:
             ).fetchall()
         return [SessionRecord(**dict(row)) for row in rows]
 
+    def set_title(self, session_id: str, title: str) -> None:
+        cleaned = title.strip()
+        if not cleaned:
+            raise ValueError("session title cannot be empty")
+        now = utc_now()
+        with self._database.connect() as connection, connection:
+            cursor = connection.execute(
+                "UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?",
+                (cleaned, now, session_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(f"session does not exist: {session_id}")
+
 
 class MessageRepository:
     _VALID_ROLES = frozenset({"system", "user", "assistant", "tool"})

@@ -100,6 +100,8 @@ Status: complete for the core runtime; the interactive terminal approval prompt 
 
 ### Milestone 4: Local CLI
 
+Status: complete for local demo and OpenAI-compatible live mode. The real-provider smoke test remains before the MVP release.
+
 - Add configuration loading and validation.
 - Build the terminal conversation interface.
 - Support session creation, listing, resumption, interruption, and graceful exit.

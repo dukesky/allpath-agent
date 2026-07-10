@@ -61,8 +61,34 @@ class AgentLoopTestCase(unittest.TestCase):
 
         self.assertEqual(result.content, "Hello back")
         self.assertEqual(result.model_calls, 1)
-        self.assertEqual([item.role for item in self.messages.list_for_session(self.session.id)], ["user", "assistant"])
+        self.assertEqual(
+            [item.role for item in self.messages.list_for_session(self.session.id)],
+            ["user", "assistant"],
+        )
         self.assertEqual([item.role for item in provider.requests[0].messages], ["system", "user"])
+
+    def test_model_without_tool_support_does_not_receive_tool_schemas(self) -> None:
+        provider = FakeProvider([ChatResponse(content="No tools needed")])
+        executor = MappingToolExecutor({})
+        loop = AgentLoop(provider, self.messages, self.executions, executor)
+        profile = ModelProfile(
+            "text-only",
+            "text-model",
+            quality=3,
+            cost=1,
+            supports_tools=False,
+        )
+
+        loop.run(
+            self.session.id,
+            "task-no-tools",
+            "Hello",
+            "You are helpful.",
+            profile,
+            tool_schemas=({"type": "function", "function": {"name": "unused"}},),
+        )
+
+        self.assertEqual(provider.requests[0].tools, ())
 
     def test_executes_tool_and_reconstructs_valid_history(self) -> None:
         provider = FakeProvider(

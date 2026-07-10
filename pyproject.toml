@@ -9,6 +9,9 @@ description = "A small personal agent with progressive capability discovery and 
 requires-python = ">=3.11"
 dependencies = []
 
+[project.scripts]
+allpath-agent = "allpath_agent.cli.main:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 

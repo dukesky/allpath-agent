@@ -46,6 +46,12 @@ class StorageTestCase(unittest.TestCase):
         self.assertEqual(routing.list_for_task(session.id, "task-1")[0]["profile"], "fast")
         self.assertEqual(sessions.get(session.id).title, "First conversation")
 
+    def test_session_title_can_be_updated(self) -> None:
+        sessions = SessionRepository(self.database)
+        session = sessions.create(session_id="session-title")
+        sessions.set_title(session.id, "Plan tomorrow")
+        self.assertEqual(sessions.get(session.id).title, "Plan tomorrow")
+
     def test_memory_upsert_preserves_identity(self) -> None:
         memories = MemoryRepository(self.database)
         original = memories.set("response_style", "concise")

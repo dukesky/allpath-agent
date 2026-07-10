@@ -67,6 +67,13 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Kept prompts, conversation content, credentials, tool arguments, results, and provider bodies out of logs.
 - Isolated logging write failures so observability cannot interrupt agent work.
 - Added budget, usage normalization, cost estimation, log privacy, and CLI logging tests.
+- Added provider timeout configuration for API and external-CLI adapters.
+- Added explicit timeout, connection, rate-limit, server, authentication, and response error classes.
+- Added bounded exponential retries for transient provider failures with numeric `Retry-After` support.
+- Counted every retry attempt against the existing per-task model-call budget.
+- Added structured retry, terminal failure, and task interruption events without response-body logging.
+- Marked interrupted tool executions terminal and repaired all unresolved tool-result messages in the Agent Loop.
+- Added HTTP classification, retry-budget, backoff, timeout, and multi-tool interruption tests.
 
 ### Changed
 

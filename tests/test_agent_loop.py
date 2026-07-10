@@ -12,7 +12,15 @@ from allpath_agent.agent import (
     IterationLimitError,
     ToolCall,
 )
-from allpath_agent.models import FakeProvider, ModelProfile, ProviderPool
+from allpath_agent.models import (
+    FakeProvider,
+    ModelProfile,
+    ProviderAuthenticationError,
+    ProviderPool,
+    ProviderRateLimitError,
+    ProviderResponseError,
+    ProviderTimeoutError,
+)
 from allpath_agent.storage import (
     Database,
     MemoryRepository,
@@ -35,9 +43,30 @@ class MappingToolExecutor:
     def execute(self, name: str, arguments: dict[str, Any], context: ToolContext) -> Any:
         self.calls.append((name, arguments))
         value = self.values[name]
-        if isinstance(value, Exception):
+        if isinstance(value, BaseException):
             raise value
         return value
+
+
+class SequenceProvider:
+    def __init__(self, outcomes: list[ChatResponse | BaseException]):
+        self.outcomes = list(outcomes)
+        self.requests = []
+
+    def complete(self, request):
+        self.requests.append(request)
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+class RecordingEventLogger:
+    def __init__(self):
+        self.records: list[dict[str, Any]] = []
+
+    def emit(self, event: str, **fields: Any) -> None:
+        self.records.append({"event": event, **fields})
 
 
 class AgentLoopTestCase(unittest.TestCase):
@@ -271,6 +300,159 @@ class AgentLoopTestCase(unittest.TestCase):
 
         self.assertEqual(result.content, "Completed answer")
         self.assertEqual(result.total_tokens, 15)
+
+    def test_retries_transient_provider_errors_with_bounded_backoff(self) -> None:
+        provider = SequenceProvider(
+            [
+                ProviderRateLimitError("busy", retry_after_seconds=4.0),
+                ProviderTimeoutError("slow"),
+                ChatResponse(content="Recovered"),
+            ]
+        )
+        delays: list[float] = []
+        events = RecordingEventLogger()
+        loop = AgentLoop(
+            provider,
+            self.messages,
+            self.executions,
+            MappingToolExecutor({}),
+            provider_max_attempts=3,
+            retry_base_delay_seconds=0.5,
+            retry_max_delay_seconds=2.0,
+            sleep_fn=delays.append,
+            event_logger=events,
+        )
+
+        result = loop.run(
+            self.session.id,
+            "task-retry",
+            "Try safely",
+            "You are helpful.",
+            self.profile,
+        )
+
+        self.assertEqual(result.content, "Recovered")
+        self.assertEqual(result.model_calls, 3)
+        self.assertEqual(delays, [2.0, 1.0])
+        self.assertEqual(len(provider.requests), 3)
+        self.assertEqual(
+            [record["event"] for record in events.records].count(
+                "model_call_retry_scheduled"
+            ),
+            2,
+        )
+
+    def test_does_not_retry_authentication_failures(self) -> None:
+        provider = SequenceProvider([ProviderAuthenticationError("invalid key")])
+        delays: list[float] = []
+        loop = AgentLoop(
+            provider,
+            self.messages,
+            self.executions,
+            MappingToolExecutor({}),
+            sleep_fn=delays.append,
+        )
+
+        with self.assertRaises(ProviderAuthenticationError):
+            loop.run(
+                self.session.id,
+                "task-auth",
+                "Hello",
+                "You are helpful.",
+                self.profile,
+            )
+
+        self.assertEqual(len(provider.requests), 1)
+        self.assertEqual(delays, [])
+
+    def test_does_not_retry_invalid_provider_responses(self) -> None:
+        provider = SequenceProvider([ProviderResponseError("invalid response")])
+        loop = AgentLoop(
+            provider,
+            self.messages,
+            self.executions,
+            MappingToolExecutor({}),
+            sleep_fn=lambda delay: self.fail("invalid responses must not retry"),
+        )
+
+        with self.assertRaises(ProviderResponseError):
+            loop.run(
+                self.session.id,
+                "task-invalid-response",
+                "Hello",
+                "You are helpful.",
+                self.profile,
+            )
+
+        self.assertEqual(len(provider.requests), 1)
+
+    def test_retry_attempts_respect_model_call_limit(self) -> None:
+        provider = SequenceProvider(
+            [ProviderTimeoutError("slow"), ProviderTimeoutError("still slow")]
+        )
+        loop = AgentLoop(
+            provider,
+            self.messages,
+            self.executions,
+            MappingToolExecutor({}),
+            max_model_calls=2,
+            provider_max_attempts=3,
+            retry_base_delay_seconds=0,
+            sleep_fn=lambda delay: None,
+        )
+
+        with self.assertRaises(ProviderTimeoutError):
+            loop.run(
+                self.session.id,
+                "task-retry-limit",
+                "Hello",
+                "You are helpful.",
+                self.profile,
+            )
+
+        self.assertEqual(len(provider.requests), 2)
+
+    def test_tool_interrupt_closes_all_tool_results_and_execution(self) -> None:
+        provider = FakeProvider(
+            [
+                ChatResponse(
+                    tool_calls=(
+                        ToolCall("call-1", "first", {}),
+                        ToolCall("call-2", "second", {}),
+                    )
+                )
+            ]
+        )
+        events = RecordingEventLogger()
+        loop = AgentLoop(
+            provider,
+            self.messages,
+            self.executions,
+            MappingToolExecutor({"first": KeyboardInterrupt()}),
+            event_logger=events,
+        )
+
+        with self.assertRaises(KeyboardInterrupt):
+            loop.run(
+                self.session.id,
+                "task-interrupt",
+                "Run tools",
+                "You are helpful.",
+                self.profile,
+            )
+
+        history = self.messages.list_for_session(self.session.id)
+        executions = self.executions.list_for_task(self.session.id, "task-interrupt")
+        self.assertEqual(
+            [record.role for record in history],
+            ["user", "assistant", "tool", "tool", "assistant"],
+        )
+        self.assertEqual(
+            [record.tool_call_id for record in history if record.role == "tool"],
+            ["call-1", "call-2"],
+        )
+        self.assertEqual(executions[0]["status"], "interrupted")
+        self.assertEqual(events.records[-1]["event"], "task_interrupted")
 
     def test_registry_runtime_denies_side_effect_and_returns_result_to_model(self) -> None:
         provider = FakeProvider(

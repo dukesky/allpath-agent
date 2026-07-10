@@ -46,12 +46,14 @@ def build_provider_pool(
             providers[provider_id] = OpenAICompatibleProvider(
                 provider_config.base_url,
                 credential,
+                timeout_seconds=provider_config.timeout_seconds,
             )
         elif provider_config.protocol == ProviderProtocol.ANTHROPIC_MESSAGES:
             providers[provider_id] = AnthropicMessagesProvider(
                 provider_config.base_url,
                 credential,
                 max_output_tokens=provider_config.max_output_tokens,
+                timeout_seconds=provider_config.timeout_seconds,
             )
         elif provider_config.protocol == ProviderProtocol.EXTERNAL_CLI:
             if provider_config.auth != AuthType.EXTERNAL_CLI:
@@ -63,7 +65,10 @@ def build_provider_pool(
                     f"external provider command is not available: "
                     f"{provider_config.external_command}"
                 )
-            providers[provider_id] = ClaudeCodeProvider(provider_config.external_command)
+            providers[provider_id] = ClaudeCodeProvider(
+                provider_config.external_command,
+                timeout_seconds=provider_config.timeout_seconds,
+            )
         else:
             raise ConfigError(f"unsupported provider protocol: {provider_config.protocol}")
     return ProviderPool(providers)

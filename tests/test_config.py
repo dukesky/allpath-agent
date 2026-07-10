@@ -15,6 +15,7 @@ class ConfigTestCase(unittest.TestCase):
             config = load_config(path)
 
         self.assertEqual(config.providers["openai"].api_key_env, "OPENAI_API_KEY")
+        self.assertEqual(config.providers["openai"].timeout_seconds, 60.0)
         self.assertEqual(config.providers["anthropic"].protocol, "anthropic_messages")
         self.assertEqual([profile.name for profile in config.models], ["advanced", "fast"])
         self.assertEqual(
@@ -24,6 +25,9 @@ class ConfigTestCase(unittest.TestCase):
         self.assertEqual(config.agent.max_model_calls, 12)
         self.assertEqual(config.agent.max_task_tokens, 100_000)
         self.assertEqual(config.agent.max_task_cost_usd, 0.0)
+        self.assertEqual(config.agent.provider_max_attempts, 3)
+        self.assertEqual(config.agent.retry_base_delay_seconds, 0.5)
+        self.assertEqual(config.agent.retry_max_delay_seconds, 8.0)
 
     def test_legacy_single_provider_config_remains_supported(self) -> None:
         legacy = """[provider]
@@ -85,6 +89,32 @@ max_context_tokens = 1000
             path.write_text(config_text, encoding="utf-8")
             with self.assertRaisesRegex(ConfigError, "supports_tools = false"):
                 load_config(path)
+
+    def test_external_cli_uses_longer_default_timeout(self) -> None:
+        config_text = """[providers.claude_app]
+protocol = "external_cli"
+auth = "external_cli"
+external_command = "claude"
+
+[agent]
+system_prompt = "Helpful"
+max_model_calls = 4
+advanced_threshold = 3
+
+[models.advanced]
+provider = "claude_app"
+model = "sonnet"
+quality = 10
+cost = 8
+supports_tools = false
+max_context_tokens = 1000
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.toml"
+            path.write_text(config_text, encoding="utf-8")
+            config = load_config(path)
+
+        self.assertEqual(config.providers["claude_app"].timeout_seconds, 300.0)
 
     def test_unimplemented_auth_protocol_combination_is_rejected(self) -> None:
         config_text = """[providers.anthropic]

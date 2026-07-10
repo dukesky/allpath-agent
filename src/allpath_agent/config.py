@@ -14,6 +14,7 @@ protocol = "openai_chat_completions"
 auth = "api_key"
 base_url = "https://api.openai.com/v1"
 api_key_env = "OPENAI_API_KEY"
+timeout_seconds = 60.0
 
 [providers.anthropic]
 protocol = "anthropic_messages"
@@ -21,12 +22,16 @@ auth = "api_key"
 base_url = "https://api.anthropic.com"
 api_key_env = "ANTHROPIC_API_KEY"
 max_output_tokens = 4096
+timeout_seconds = 60.0
 
 [agent]
 system_prompt = "You are Allpath Agent, a concise and helpful personal assistant."
 max_model_calls = 12
 max_task_tokens = 100000
 max_task_cost_usd = 0.0
+provider_max_attempts = 3
+retry_base_delay_seconds = 0.5
+retry_max_delay_seconds = 8.0
 advanced_threshold = 6
 
 [models.fast]
@@ -66,6 +71,7 @@ class ProviderConfig:
     api_key_env: str = ""
     max_output_tokens: int = 4096
     external_command: str = ""
+    timeout_seconds: float = 60.0
 
 
 @dataclass(frozen=True)
@@ -75,6 +81,9 @@ class AgentConfig:
     advanced_threshold: int
     max_task_tokens: int = 100_000
     max_task_cost_usd: float = 0.0
+    provider_max_attempts: int = 3
+    retry_base_delay_seconds: float = 0.5
+    retry_max_delay_seconds: float = 8.0
 
 
 @dataclass(frozen=True)
@@ -122,6 +131,21 @@ def _parse_config(raw: dict[str, Any]) -> AppConfig:
             advanced_threshold=_positive_integer(agent_raw, "advanced_threshold"),
             max_task_tokens=_non_negative_integer(agent_raw, "max_task_tokens", 100_000),
             max_task_cost_usd=_non_negative_number(agent_raw, "max_task_cost_usd", 0.0),
+            provider_max_attempts=_positive_integer(
+                agent_raw,
+                "provider_max_attempts",
+                3,
+            ),
+            retry_base_delay_seconds=_non_negative_number(
+                agent_raw,
+                "retry_base_delay_seconds",
+                0.5,
+            ),
+            retry_max_delay_seconds=_non_negative_number(
+                agent_raw,
+                "retry_max_delay_seconds",
+                8.0,
+            ),
         )
         models = tuple(
             _model_profile(name, value)
@@ -199,6 +223,7 @@ def _provider_config(provider_id: str, raw: dict[str, Any]) -> ProviderConfig:
         raise ConfigError(f"provider {provider_id} requires api_key_env")
     if auth == AuthType.EXTERNAL_CLI and not external_command:
         raise ConfigError(f"provider {provider_id} requires external_command")
+    default_timeout = 300.0 if protocol == ProviderProtocol.EXTERNAL_CLI else 60.0
     return ProviderConfig(
         id=provider_id,
         protocol=protocol,
@@ -207,6 +232,7 @@ def _provider_config(provider_id: str, raw: dict[str, Any]) -> ProviderConfig:
         api_key_env=api_key_env,
         max_output_tokens=_positive_integer(raw, "max_output_tokens", 4096),
         external_command=external_command,
+        timeout_seconds=_positive_number(raw, "timeout_seconds", default_timeout),
     )
 
 
@@ -269,6 +295,13 @@ def _non_negative_number(raw: dict[str, Any], key: str, default: float) -> float
     value = raw.get(key, default)
     if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
         raise ConfigError(f"{key} must be a non-negative number")
+    return float(value)
+
+
+def _positive_number(raw: dict[str, Any], key: str, default: float) -> float:
+    value = raw.get(key, default)
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+        raise ConfigError(f"{key} must be a positive number")
     return float(value)
 
 

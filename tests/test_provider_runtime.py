@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import unittest
 import sys
+import unittest
+from unittest.mock import patch
 
 from allpath_agent.config import AgentConfig, AppConfig, ConfigError, ProviderConfig
 from allpath_agent.models import AuthType, ModelProfile, ProviderProtocol
@@ -35,6 +36,31 @@ class ProviderRuntimeTestCase(unittest.TestCase):
         )
         with self.assertRaisesRegex(ConfigError, "OPENAI_API_KEY"):
             build_provider_pool(config, {})
+
+    def test_provider_timeout_is_propagated_to_adapter(self) -> None:
+        config = app_config(
+            {
+                "openai": ProviderConfig(
+                    "openai",
+                    ProviderProtocol.OPENAI_CHAT_COMPLETIONS,
+                    AuthType.API_KEY,
+                    "https://api.openai.com/v1",
+                    "OPENAI_API_KEY",
+                    timeout_seconds=7.5,
+                )
+            },
+            (ModelProfile("fast", "model", 4, 1, provider="openai"),),
+        )
+        with patch(
+            "allpath_agent.provider_runtime.OpenAICompatibleProvider"
+        ) as provider_factory:
+            build_provider_pool(config, {"OPENAI_API_KEY": "secret"})
+
+        provider_factory.assert_called_once_with(
+            "https://api.openai.com/v1",
+            "secret",
+            timeout_seconds=7.5,
+        )
 
     def test_unused_provider_does_not_require_credential(self) -> None:
         config = app_config(

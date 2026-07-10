@@ -9,6 +9,7 @@ Allpath applies a fresh budget to every user task. Budgets prevent a tool loop f
 max_model_calls = 12
 max_task_tokens = 100000
 max_task_cost_usd = 1.0
+provider_max_attempts = 3
 
 [models.fast]
 input_cost_per_million = 0.4
@@ -20,6 +21,8 @@ Use the current prices published by the selected provider. Allpath does not hard
 Providers report usage using different keys. Allpath normalizes OpenAI-style `prompt_tokens` and `completion_tokens` and Anthropic-style `input_tokens` and `output_tokens` into one task total.
 
 Limits are checked before each model call and before executing requested tools. A single provider response can exceed the remaining budget because its exact output size is unknown before the request. If that response is a final answer, Allpath returns it rather than discarding work already completed. If it requests tools, Allpath stops before executing them or making another model call.
+
+Transient retry attempts also count as model calls. See [Failure recovery](FAILURE_RECOVERY.md) for classification and backoff behavior.
 
 If a provider does not report usage, model-call limits still work, but token and estimated-cost limits cannot account for that response. The CLI only displays usage when the provider reports it.
 

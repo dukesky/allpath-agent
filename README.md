@@ -67,6 +67,7 @@ The first locally runnable MVP includes:
 - progressive capability recommendations;
 - clear tool approval boundaries;
 - per-task model-call, token, and optional estimated-cost budgets;
+- classified provider failures with bounded exponential retries;
 - privacy-safe structured JSONL runtime logs;
 - interruption and graceful shutdown;
 - automated unit and local integration tests.
@@ -174,17 +175,22 @@ protocol = "openai_chat_completions"
 auth = "api_key"
 base_url = "https://api.openai.com/v1"
 api_key_env = "OPENAI_API_KEY"
+timeout_seconds = 60.0
 
 [providers.anthropic]
 protocol = "anthropic_messages"
 auth = "api_key"
 base_url = "https://api.anthropic.com"
 api_key_env = "ANTHROPIC_API_KEY"
+timeout_seconds = 60.0
 
 [agent]
 max_model_calls = 12
 max_task_tokens = 100000
 max_task_cost_usd = 0.0
+provider_max_attempts = 3
+retry_base_delay_seconds = 0.5
+retry_max_delay_seconds = 8.0
 
 [models.fast]
 provider = "openai"
@@ -217,6 +223,7 @@ Set model prices from the provider's current pricing page before enabling a nonz
 - [Architecture](docs/ARCHITECTURE.md)
 - [Model providers and authentication](docs/PROVIDERS.md)
 - [Task budgets and structured logs](docs/BUDGETS_AND_LOGS.md)
+- [Failure recovery](docs/FAILURE_RECOVERY.md)
 - [MVP implementation plan](docs/MVP_PLAN.md)
 - [Validation strategy](docs/VALIDATION.md)
 - [Change log](CHANGELOG.md)

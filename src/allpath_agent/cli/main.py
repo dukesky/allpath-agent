@@ -207,6 +207,9 @@ def _build_application(
         max_model_calls = 12
         max_task_tokens = 100_000
         max_task_cost_usd = 0.0
+        provider_max_attempts = 3
+        retry_base_delay_seconds = 0.5
+        retry_max_delay_seconds = 8.0
         advanced_threshold = 6
     else:
         config = load_config(home / "config.toml")
@@ -218,6 +221,9 @@ def _build_application(
         max_model_calls = config.agent.max_model_calls
         max_task_tokens = config.agent.max_task_tokens
         max_task_cost_usd = config.agent.max_task_cost_usd
+        provider_max_attempts = config.agent.provider_max_attempts
+        retry_base_delay_seconds = config.agent.retry_base_delay_seconds
+        retry_max_delay_seconds = config.agent.retry_max_delay_seconds
         advanced_threshold = config.agent.advanced_threshold
 
     memories = MemoryRepository(database)
@@ -236,6 +242,9 @@ def _build_application(
         max_model_calls=max_model_calls,
         max_task_tokens=max_task_tokens,
         max_task_cost_usd=max_task_cost_usd,
+        provider_max_attempts=provider_max_attempts,
+        retry_base_delay_seconds=retry_base_delay_seconds,
+        retry_max_delay_seconds=retry_max_delay_seconds,
         event_logger=JsonlEventLogger(home / "logs" / "agent.jsonl"),
     )
     curriculum = CurriculumService(

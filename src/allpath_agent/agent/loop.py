@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
 
 from allpath_agent.models.messages import ChatMessage, ChatRequest, ToolCall
 from allpath_agent.models.pool import ProviderPool
-from allpath_agent.models.provider import ChatProvider
+from allpath_agent.models.provider import ChatProvider, RetryableProviderError
 from allpath_agent.models.router import ModelProfile
 from allpath_agent.observability import EventLogger, NullEventLogger
 from allpath_agent.storage import MessageRepository, ToolExecutionRepository
@@ -44,10 +46,18 @@ class AgentLoop:
         max_model_calls: int = 12,
         max_task_tokens: int = 100_000,
         max_task_cost_usd: float = 0.0,
+        provider_max_attempts: int = 3,
+        retry_base_delay_seconds: float = 0.5,
+        retry_max_delay_seconds: float = 8.0,
+        sleep_fn: Callable[[float], None] | None = None,
         event_logger: EventLogger | None = None,
     ):
         if max_model_calls < 1:
             raise ValueError("max_model_calls must be positive")
+        if provider_max_attempts < 1:
+            raise ValueError("provider_max_attempts must be positive")
+        if retry_base_delay_seconds < 0 or retry_max_delay_seconds < 0:
+            raise ValueError("retry delays cannot be negative")
         self._providers = (
             provider if isinstance(provider, ProviderPool) else ProviderPool.single(provider)
         )
@@ -56,6 +66,10 @@ class AgentLoop:
         self._tool_executor = tool_executor
         self._max_model_calls = max_model_calls
         self._budget = TaskBudget(max_task_tokens, max_task_cost_usd)
+        self._provider_max_attempts = provider_max_attempts
+        self._retry_base_delay_seconds = retry_base_delay_seconds
+        self._retry_max_delay_seconds = retry_max_delay_seconds
+        self._sleep = sleep_fn or time.sleep
         self._events = event_logger or NullEventLogger()
 
     def run(
@@ -81,6 +95,7 @@ class AgentLoop:
             max_model_calls=self._max_model_calls,
             max_task_tokens=self._budget.max_total_tokens,
             max_task_cost_usd=self._budget.max_cost_usd,
+            provider_max_attempts=self._provider_max_attempts,
         )
 
         try:
@@ -94,21 +109,68 @@ class AgentLoop:
                     messages=(ChatMessage("system", system_prompt), *self._history(session_id)),
                     tools=available_tools if model_profile.supports_tools else (),
                 )
-                started = perf_counter()
-                try:
-                    response = self._providers.complete(model_profile.provider, request)
-                except Exception as error:
-                    self._events.emit(
-                        "model_call_failed",
-                        session_id=session_id,
-                        task_id=task_id,
-                        provider=model_profile.provider,
-                        model=model_profile.model,
-                        duration_ms=round((perf_counter() - started) * 1000, 3),
-                        error_type=type(error).__name__,
-                    )
-                    raise
-                model_calls += 1
+                response = None
+                for attempt in range(1, self._provider_max_attempts + 1):
+                    if model_calls >= self._max_model_calls:
+                        raise IterationLimitError(
+                            f"task exceeded the limit of {self._max_model_calls} model calls"
+                        )
+                    model_calls += 1
+                    started = perf_counter()
+                    try:
+                        response = self._providers.complete(model_profile.provider, request)
+                    except RetryableProviderError as error:
+                        duration_ms = round((perf_counter() - started) * 1000, 3)
+                        can_retry = (
+                            attempt < self._provider_max_attempts
+                            and model_calls < self._max_model_calls
+                        )
+                        if not can_retry:
+                            self._events.emit(
+                                "model_call_failed",
+                                session_id=session_id,
+                                task_id=task_id,
+                                provider=model_profile.provider,
+                                model=model_profile.model,
+                                model_call=model_calls,
+                                attempt=attempt,
+                                duration_ms=duration_ms,
+                                error_type=type(error).__name__,
+                                retryable=True,
+                            )
+                            raise
+                        delay = self._retry_delay(error, attempt)
+                        self._events.emit(
+                            "model_call_retry_scheduled",
+                            session_id=session_id,
+                            task_id=task_id,
+                            provider=model_profile.provider,
+                            model=model_profile.model,
+                            model_call=model_calls,
+                            attempt=attempt,
+                            duration_ms=duration_ms,
+                            error_type=type(error).__name__,
+                            delay_seconds=delay,
+                        )
+                        self._sleep(delay)
+                        continue
+                    except Exception as error:
+                        self._events.emit(
+                            "model_call_failed",
+                            session_id=session_id,
+                            task_id=task_id,
+                            provider=model_profile.provider,
+                            model=model_profile.model,
+                            model_call=model_calls,
+                            attempt=attempt,
+                            duration_ms=round((perf_counter() - started) * 1000, 3),
+                            error_type=type(error).__name__,
+                            retryable=False,
+                        )
+                        raise
+                    break
+                if response is None:
+                    raise RuntimeError("provider attempts ended without a response")
                 totals = budget.record(response.usage, model_profile)
                 self._events.emit(
                     "model_call_completed",
@@ -117,6 +179,7 @@ class AgentLoop:
                     provider=model_profile.provider,
                     model=model_profile.model,
                     model_call=model_calls,
+                    attempt=attempt,
                     duration_ms=round((perf_counter() - started) * 1000, 3),
                     input_tokens=totals.input_tokens,
                     output_tokens=totals.output_tokens,
@@ -183,6 +246,20 @@ class AgentLoop:
             raise IterationLimitError(
                 f"task exceeded the limit of {self._max_model_calls} model calls"
             )
+        except KeyboardInterrupt:
+            self._close_interrupted_history(session_id)
+            totals = budget.totals
+            self._events.emit(
+                "task_interrupted",
+                session_id=session_id,
+                task_id=task_id,
+                model_calls=model_calls,
+                tool_calls=executed_tool_calls,
+                total_tokens=totals.total_tokens,
+                estimated_cost_usd=round(totals.estimated_cost_usd, 8),
+                usage_reported=totals.usage_reported,
+            )
+            raise
         except Exception as error:
             totals = budget.totals
             self._events.emit(
@@ -217,6 +294,25 @@ class AgentLoop:
                 tool_call.arguments,
                 ToolContext(session_id, task_id),
             )
+        except KeyboardInterrupt:
+            payload = {
+                "ok": False,
+                "error": {
+                    "type": "Interrupted",
+                    "message": "tool execution interrupted",
+                },
+            }
+            self._tool_executions.finish(execution_id, "interrupted", payload)
+            self._events.emit(
+                "tool_call_completed",
+                session_id=session_id,
+                task_id=task_id,
+                tool=tool_call.name,
+                status="interrupted",
+                duration_ms=round((perf_counter() - started) * 1000, 3),
+                error_type="KeyboardInterrupt",
+            )
+            raise
         except Exception as error:
             payload = {
                 "ok": False,
@@ -249,9 +345,63 @@ class AgentLoop:
         )
         return payload
 
+    def _retry_delay(
+        self,
+        error: RetryableProviderError,
+        attempt: int,
+    ) -> float:
+        requested = error.retry_after_seconds
+        exponential = self._retry_base_delay_seconds * (2 ** (attempt - 1))
+        delay = requested if requested is not None else exponential
+        return min(delay, self._retry_max_delay_seconds)
+
     def _history(self, session_id: str) -> tuple[ChatMessage, ...]:
         records = self._messages.list_for_session(session_id)
         return tuple(_record_to_message(record) for record in records)
+
+    def _close_interrupted_history(self, session_id: str) -> None:
+        history = self._messages.list_for_session(session_id)
+        if not history:
+            return
+        last = history[-1]
+        if last.role == "assistant" and not last.metadata.get("tool_calls"):
+            return
+
+        pending_calls: list[dict[str, Any]] = []
+        completed_call_ids: set[str] = set()
+        for record in reversed(history):
+            if record.role == "tool" and record.tool_call_id:
+                completed_call_ids.add(record.tool_call_id)
+                continue
+            if record.role == "assistant" and record.metadata.get("tool_calls"):
+                pending_calls = list(record.metadata["tool_calls"])
+                break
+            if record.role == "user":
+                break
+
+        for tool_call in pending_calls:
+            if tool_call["id"] in completed_call_ids:
+                continue
+            self._messages.append(
+                session_id,
+                "tool",
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": {
+                            "type": "Interrupted",
+                            "message": "task interrupted",
+                        },
+                    },
+                    sort_keys=True,
+                ),
+                tool_call_id=tool_call["id"],
+            )
+        self._messages.append(
+            session_id,
+            "assistant",
+            "Task interrupted before completion.",
+        )
 
 
 def _record_to_message(record: MessageRecord) -> ChatMessage:

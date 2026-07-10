@@ -122,6 +122,10 @@ Real API tests are intentionally separate from default CI because they require s
 - JSONL logs contain lifecycle metadata without conversation content, tool payloads, or credentials.
 - Logging-path failures do not break agent work.
 - CLI subprocess tests verify logs are created with privacy boundaries intact.
+- HTTP 429, authentication, timeout, and external-CLI failures map to the correct retry class.
+- Transient failures retry with bounded backoff and cannot exceed the model-call limit.
+- Authentication and malformed-response failures do not retry.
+- Tool interruption persists an `interrupted` execution and closes every tool-call lifecycle.
 
 The default suite now validates all of these behaviors against temporary SQLite databases and through the real CLI subprocess.
 

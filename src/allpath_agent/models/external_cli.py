@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .messages import ChatMessage, ChatRequest, ChatResponse
-from .provider import ProviderError
+from .provider import ProviderError, ProviderTimeoutError
 
 
 @dataclass(frozen=True)
@@ -97,5 +97,5 @@ def _run_command(arguments: list[str], timeout_seconds: float) -> CommandResult:
     except FileNotFoundError as error:
         raise ProviderError(f"external provider command not found: {arguments[0]}") from error
     except subprocess.TimeoutExpired as error:
-        raise ProviderError("external provider command timed out") from error
+        raise ProviderTimeoutError("external provider command timed out") from error
     return CommandResult(completed.returncode, completed.stdout, completed.stderr)

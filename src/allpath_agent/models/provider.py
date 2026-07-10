@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import socket
 from collections.abc import Callable
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
@@ -11,6 +12,36 @@ from .messages import ChatMessage, ChatRequest, ChatResponse, ToolCall
 
 
 class ProviderError(RuntimeError):
+    pass
+
+
+class RetryableProviderError(ProviderError):
+    def __init__(self, message: str, retry_after_seconds: float | None = None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+class ProviderTimeoutError(RetryableProviderError):
+    pass
+
+
+class ProviderRateLimitError(RetryableProviderError):
+    pass
+
+
+class ProviderConnectionError(RetryableProviderError):
+    pass
+
+
+class ProviderServerError(RetryableProviderError):
+    pass
+
+
+class ProviderAuthenticationError(ProviderError):
+    pass
+
+
+class ProviderResponseError(ProviderError):
     pass
 
 
@@ -130,7 +161,9 @@ def _parse_response(payload: dict[str, Any]) -> ChatResponse:
         choice = payload["choices"][0]
         message = choice["message"]
     except (KeyError, IndexError, TypeError) as error:
-        raise ProviderError("provider response is missing choices[0].message") from error
+        raise ProviderResponseError(
+            "provider response is missing choices[0].message"
+        ) from error
 
     tool_calls: list[ToolCall] = []
     for raw_call in message.get("tool_calls") or []:
@@ -142,7 +175,7 @@ def _parse_response(payload: dict[str, Any]) -> ChatResponse:
                 raise TypeError("tool arguments must decode to an object")
             tool_calls.append(ToolCall(raw_call["id"], function["name"], arguments))
         except (KeyError, TypeError, json.JSONDecodeError) as error:
-            raise ProviderError("provider returned an invalid tool call") from error
+            raise ProviderResponseError("provider returned an invalid tool call") from error
 
     raw_usage = payload.get("usage") or {}
     usage = {
@@ -175,14 +208,43 @@ def json_http_transport(
             body = response.read().decode("utf-8")
     except HTTPError as error:
         body = error.read().decode("utf-8", errors="replace")
-        raise ProviderError(f"provider HTTP {error.code}: {body[:500]}") from error
+        message = f"provider HTTP {error.code}: {body[:500]}"
+        if error.code in {401, 403}:
+            raise ProviderAuthenticationError(message) from error
+        if error.code == 408:
+            raise ProviderTimeoutError(message) from error
+        if error.code == 429:
+            raise ProviderRateLimitError(
+                message,
+                retry_after_seconds=_retry_after_seconds(error),
+            ) from error
+        if error.code >= 500:
+            raise ProviderServerError(message) from error
+        raise ProviderResponseError(message) from error
+    except (TimeoutError, socket.timeout) as error:
+        raise ProviderTimeoutError("provider request timed out") from error
     except URLError as error:
-        raise ProviderError(f"provider connection failed: {error.reason}") from error
+        if isinstance(error.reason, (TimeoutError, socket.timeout)):
+            raise ProviderTimeoutError("provider request timed out") from error
+        raise ProviderConnectionError(
+            f"provider connection failed: {error.reason}"
+        ) from error
 
     try:
         parsed = json.loads(body)
     except json.JSONDecodeError as error:
-        raise ProviderError("provider returned invalid JSON") from error
+        raise ProviderResponseError("provider returned invalid JSON") from error
     if not isinstance(parsed, dict):
-        raise ProviderError("provider response must be a JSON object")
+        raise ProviderResponseError("provider response must be a JSON object")
     return parsed
+
+
+def _retry_after_seconds(error: HTTPError) -> float | None:
+    value = error.headers.get("Retry-After") if error.headers else None
+    if value is None:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        return None
+    return seconds if seconds >= 0 else None

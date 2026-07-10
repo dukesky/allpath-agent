@@ -118,11 +118,12 @@ Status: complete with eight implemented capabilities, persistent evidence, one s
 
 ### Milestone 6: MVP hardening
 
-Status: multi-provider foundations, per-task model-call/token/cost budgets, privacy-safe JSONL logs, and related tests are complete. Provider/database recovery and real-provider smoke tests remain.
+Status: multi-provider foundations, per-task budgets, privacy-safe JSONL logs, classified provider retries, and interruption repair are complete. Database recovery and real-provider smoke tests remain.
 
 - Add iteration, token, and estimated-cost budgets. Complete.
 - Add structured local logs. Complete.
-- Test recovery from provider, tool, and database failures.
+- Test recovery from provider and tool failures. Complete.
+- Test recovery from database failures.
 - Run the real-provider smoke test and document known limitations.
 
 ## Explicitly deferred

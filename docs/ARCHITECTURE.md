@@ -34,6 +34,8 @@ Owns message ordering, model calls, tool execution, interruption boundaries, and
 
 Each task owns an independent budget tracker. Provider-specific usage fields are normalized into input, output, and total tokens, then combined with model-profile prices for an estimated USD cost. Limits are checked before continuation so an exhausted tool loop cannot execute more tools or make another model call.
 
+Provider attempts classify timeouts, connection failures, rate limits, server failures, authentication failures, and malformed responses. Only transient classes retry, using bounded exponential backoff. Failed attempts count toward the same model-call limit as successful attempts.
+
 ### Model router
 
 First filters models by hard requirements, then ranks eligible profiles by task complexity, expected quality, cost policy, and user preference. A task pins its selected model. Escalation is monotonic for the remainder of that task.
@@ -59,6 +61,8 @@ SQLite stores sessions, messages, tool executions, model decisions, workflow run
 ### Observability
 
 The local runtime writes append-only JSONL events for task, model-call, and tool-call boundaries. Events contain IDs, timings, usage counters, model metadata, statuses, and error types. They never contain prompts, conversation content, credentials, tool arguments, tool results, or provider response bodies. Logging failures do not interrupt the Agent Loop.
+
+Keyboard interruption is repaired inside the Agent Loop. Active tool executions transition to `interrupted`, unresolved tool-call IDs receive matching tool-result messages, and the turn ends with an assistant interruption record. This preserves valid message history for every interface, not only the CLI.
 
 ## Prompt caching
 

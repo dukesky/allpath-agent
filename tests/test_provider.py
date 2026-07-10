@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import io
+import subprocess
 import unittest
 from typing import Any
+from unittest.mock import patch
+from urllib.error import HTTPError
 
 from allpath_agent.agent import ChatMessage, ChatRequest, ChatResponse, ToolCall
 from allpath_agent.models import (
@@ -10,9 +14,14 @@ from allpath_agent.models import (
     CommandResult,
     FakeProvider,
     OpenAICompatibleProvider,
+    ProviderAuthenticationError,
     ProviderError,
     ProviderPool,
+    ProviderRateLimitError,
+    ProviderServerError,
+    ProviderTimeoutError,
 )
+from allpath_agent.models.provider import json_http_transport
 
 
 class OpenAICompatibleProviderTestCase(unittest.TestCase):
@@ -79,6 +88,44 @@ class OpenAICompatibleProviderTestCase(unittest.TestCase):
         provider = OpenAICompatibleProvider("http://localhost:11434/v1", transport=transport)
         provider.complete(ChatRequest("local-model", (ChatMessage("user", "hello"),)))
         self.assertNotIn("Authorization", captured["headers"])
+
+    def test_http_429_is_retryable_and_preserves_retry_after(self) -> None:
+        error = HTTPError(
+            "https://example.test",
+            429,
+            "rate limited",
+            {"Retry-After": "2.5"},
+            io.BytesIO(b'{"error":"busy"}'),
+        )
+        with patch("allpath_agent.models.provider.urlopen", side_effect=error):
+            with self.assertRaises(ProviderRateLimitError) as caught:
+                json_http_transport("https://example.test", {}, {}, 1)
+
+        self.assertEqual(caught.exception.retry_after_seconds, 2.5)
+
+    def test_http_authentication_failure_is_not_retryable(self) -> None:
+        error = HTTPError(
+            "https://example.test",
+            401,
+            "unauthorized",
+            {},
+            io.BytesIO(b'{"error":"invalid key"}'),
+        )
+        with patch("allpath_agent.models.provider.urlopen", side_effect=error):
+            with self.assertRaises(ProviderAuthenticationError):
+                json_http_transport("https://example.test", {}, {}, 1)
+
+    def test_http_5xx_is_retryable(self) -> None:
+        error = HTTPError(
+            "https://example.test",
+            503,
+            "unavailable",
+            {},
+            io.BytesIO(b'{"error":"temporarily unavailable"}'),
+        )
+        with patch("allpath_agent.models.provider.urlopen", side_effect=error):
+            with self.assertRaises(ProviderServerError):
+                json_http_transport("https://example.test", {}, {}, 1)
 
 
 class AnthropicMessagesProviderTestCase(unittest.TestCase):
@@ -214,6 +261,17 @@ class ClaudeCodeProviderTestCase(unittest.TestCase):
                     tools=({"type": "function", "function": {"name": "tool"}},),
                 )
             )
+
+    def test_cli_timeout_is_classified_as_retryable(self) -> None:
+        provider = ClaudeCodeProvider("claude", timeout_seconds=1)
+        with patch(
+            "allpath_agent.models.external_cli.subprocess.run",
+            side_effect=subprocess.TimeoutExpired("claude", 1),
+        ):
+            with self.assertRaises(ProviderTimeoutError):
+                provider.complete(
+                    ChatRequest("sonnet", (ChatMessage("user", "hello"),))
+                )
 
 
 if __name__ == "__main__":

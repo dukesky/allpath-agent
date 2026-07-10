@@ -21,6 +21,7 @@ protocol = "openai_chat_completions"
 auth = "api_key"
 base_url = "https://api.openai.com/v1"
 api_key_env = "OPENAI_API_KEY"
+timeout_seconds = 60.0
 
 [providers.anthropic]
 protocol = "anthropic_messages"
@@ -28,6 +29,7 @@ auth = "api_key"
 base_url = "https://api.anthropic.com"
 api_key_env = "ANTHROPIC_API_KEY"
 max_output_tokens = 4096
+timeout_seconds = 60.0
 
 [models.fast]
 provider = "openai"
@@ -80,6 +82,7 @@ Claude Pro and Max users can authenticate the official Claude Code application w
 protocol = "external_cli"
 auth = "external_cli"
 external_command = "claude"
+timeout_seconds = 300.0
 
 [models.advanced]
 provider = "claude_app"

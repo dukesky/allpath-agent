@@ -74,11 +74,15 @@ Initial tools should be:
 
 ### Milestone 1: Persistence foundation
 
+Status: complete.
+
 - Define SQLite schema and migration runner.
 - Implement session, message, routing, memory, and curriculum repositories.
 - Add temporary-database integration tests.
 
 ### Milestone 2: Provider and agent loop
+
+Status: complete for the synchronous non-streaming loop; real-provider smoke testing remains deferred until configuration and CLI milestones.
 
 - Define a provider-neutral chat interface.
 - Implement an OpenAI-compatible provider.

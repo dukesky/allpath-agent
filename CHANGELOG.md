@@ -21,6 +21,12 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added the initial persistent workflow-run schema for future resumable setup flows.
 - Added storage integration tests against temporary SQLite databases.
 - Made the complete test suite compatible with Python's standard-library `unittest` runner as well as `pytest`.
+- Added provider-neutral chat request, response, message, and tool-call contracts.
+- Added a synchronous OpenAI-compatible provider with injectable transport and structured provider errors.
+- Added a deterministic fake provider for full local integration tests without API access.
+- Added the first persistent Agent Loop with model-call limits, tool execution, structured tool failures, and resumable message history.
+- Added a message metadata migration so assistant tool calls survive session persistence and reconstruction.
+- Added lifecycle validation for assistant tool calls and matching tool-result messages.
 
 ### Changed
 

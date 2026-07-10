@@ -17,6 +17,12 @@ def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _message_record(row: Any) -> MessageRecord:
+    values = dict(row)
+    values["metadata"] = json.loads(values.pop("metadata_json"))
+    return MessageRecord(**values)
+
+
 class SessionRepository:
     def __init__(self, database: Database):
         self._database = database
@@ -59,25 +65,40 @@ class MessageRepository:
         role: str,
         content: str,
         tool_call_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> MessageRecord:
         if role not in self._VALID_ROLES:
             raise ValueError(f"invalid message role: {role}")
-        if not content:
+        message_metadata = metadata or {}
+        if role == "tool" and not tool_call_id:
+            raise ValueError("tool messages require a tool_call_id")
+        if role != "tool" and tool_call_id:
+            raise ValueError("only tool messages can contain a tool_call_id")
+        if not content and not (role == "assistant" and message_metadata.get("tool_calls")):
             raise ValueError("message content cannot be empty")
         now = utc_now()
         with self._database.connect() as connection, connection:
             cursor = connection.execute(
                 """
-                INSERT INTO messages(session_id, role, content, tool_call_id, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO messages(
+                    session_id, role, content, tool_call_id, created_at, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, role, content, tool_call_id, now),
+                (session_id, role, content, tool_call_id, now, _json(message_metadata)),
             )
             connection.execute(
                 "UPDATE sessions SET updated_at = ? WHERE id = ?",
                 (now, session_id),
             )
-        return MessageRecord(cursor.lastrowid, session_id, role, content, tool_call_id, now)
+        return MessageRecord(
+            cursor.lastrowid,
+            session_id,
+            role,
+            content,
+            tool_call_id,
+            now,
+            message_metadata,
+        )
 
     def list_for_session(self, session_id: str) -> list[MessageRecord]:
         with self._database.connect() as connection:
@@ -85,7 +106,7 @@ class MessageRepository:
                 "SELECT * FROM messages WHERE session_id = ? ORDER BY id",
                 (session_id,),
             ).fetchall()
-        return [MessageRecord(**dict(row)) for row in rows]
+        return [_message_record(row) for row in rows]
 
 
 class RoutingDecisionRepository:

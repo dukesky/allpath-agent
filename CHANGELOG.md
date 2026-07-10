@@ -45,6 +45,7 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added subprocess E2E tests for startup, chat, tools, approvals, session resume, routing, and configuration errors.
 - Changed explicit deep-analysis requests to route directly to the advanced model profile.
 - Prevented tool schemas from being sent to model profiles that do not support tool calling.
+- Added an installed-console-entrypoint smoke test to every GitHub Actions Python job.
 
 ### Changed
 

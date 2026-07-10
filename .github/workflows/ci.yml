@@ -37,3 +37,6 @@ jobs:
 
       - name: Run validation suite
         run: python scripts/run_tests.py
+
+      - name: Smoke test installed CLI
+        run: printf 'hello\n/exit\n' | allpath-agent --home "${RUNNER_TEMP}/allpath-agent-smoke" --demo

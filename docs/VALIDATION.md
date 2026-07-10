@@ -21,6 +21,8 @@ python scripts/run_tests.py
 
 It compiles the source and test trees before running the standard-library test suite. The same command runs locally and in CI.
 
+After installing the package, CI also launches the real `allpath-agent` console entrypoint and completes one offline demo conversation.
+
 ## Validation layers
 
 ### Unit tests

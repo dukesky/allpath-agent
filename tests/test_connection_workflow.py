@@ -89,7 +89,7 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
         )
         (self.home / "config.toml").write_text("existing-config", encoding="utf-8")
         workflow.handle(self.session.id, "connect a model")
-        workflow.handle(self.session.id, "2")
+        workflow.handle(self.session.id, "3")
         request = workflow.handle(self.session.id, "test-model")
         failed = workflow.submit_secret(self.session.id, "not-saved")
 
@@ -103,9 +103,9 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
 
     def test_input_hint_tracks_current_workflow_step(self) -> None:
         self.workflow.handle(self.session.id, "连接模型")
-        self.assertIn("1–5", self.workflow.input_hint(self.session.id))
+        self.assertIn("1–6", self.workflow.input_hint(self.session.id))
 
-        self.workflow.handle(self.session.id, "5")
+        self.workflow.handle(self.session.id, "6")
         self.assertIn("sonnet", self.workflow.input_hint(self.session.id))
 
     def test_cancel_marks_resumable_run_terminal(self) -> None:

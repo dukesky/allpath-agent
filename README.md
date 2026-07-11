@@ -53,6 +53,14 @@ Model setup and starter mode show contextual hints next to the terminal input.
 The hint changes with the active step—for example, provider choices, the default
 model accepted by pressing Enter, cancellation, and hidden API-key entry.
 
+In an interactive terminal, provider and model setup use an arrow-key picker:
+use `↑`/`↓`, press Enter to select, `/` to search model lists, and Esc to cancel.
+OpenAI supports either a direct API key or an existing ChatGPT/Codex account via
+the official Codex CLI. Allpath checks `codex login status`, starts `codex login`
+when needed, and invokes `codex exec` without copying account tokens. Codex model
+choices come from the account-aware local Codex model cache with curated offline
+fallbacks.
+
 ### Narrow core, capabilities at the edges
 
 The core owns conversation state, model calls, tool execution, persistence, interruption, and workflow boundaries. Calendar, Slack, WhatsApp, and other integrations belong in connectors rather than inside the core loop.

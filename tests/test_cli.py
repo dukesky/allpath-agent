@@ -160,7 +160,7 @@ class CliEndToEndTestCase(unittest.TestCase):
             try:
                 result = run_cli(
                     home,
-                    "connect a model\n5\n\n/exit\n",
+                    "connect a model\n6\n\n/exit\n",
                 )
             finally:
                 os.environ["PATH"] = previous_path

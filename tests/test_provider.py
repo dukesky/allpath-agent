@@ -11,6 +11,7 @@ from allpath_agent.agent import ChatMessage, ChatRequest, ChatResponse, ToolCall
 from allpath_agent.models import (
     AnthropicMessagesProvider,
     ClaudeCodeProvider,
+    CodexCliProvider,
     CommandResult,
     FakeProvider,
     OpenAICompatibleProvider,
@@ -272,6 +273,31 @@ class ClaudeCodeProviderTestCase(unittest.TestCase):
                 provider.complete(
                     ChatRequest("sonnet", (ChatMessage("user", "hello"),))
                 )
+
+
+class CodexCliProviderTestCase(unittest.TestCase):
+    def test_uses_official_codex_exec_and_parses_last_agent_message(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def runner(arguments: list[str], timeout: float) -> CommandResult:
+            captured["arguments"] = arguments
+            captured["timeout"] = timeout
+            return CommandResult(
+                0,
+                '{"type":"thread.started","thread_id":"test"}\n'
+                '{"type":"item.completed","item":{"type":"agent_message","text":"OK"}}\n',
+                "",
+            )
+
+        provider = CodexCliProvider("codex", runner=runner)
+        response = provider.complete(
+            ChatRequest("gpt-5.4", (ChatMessage("user", "hello"),))
+        )
+
+        self.assertEqual(captured["arguments"][:2], ["codex", "exec"])
+        self.assertIn("read-only", captured["arguments"])
+        self.assertIn("gpt-5.4", captured["arguments"])
+        self.assertEqual(response.content, "OK")
 
 
 if __name__ == "__main__":

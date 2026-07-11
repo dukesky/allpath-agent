@@ -10,6 +10,7 @@ from allpath_agent.models import (
     AnthropicMessagesProvider,
     AuthType,
     ClaudeCodeProvider,
+    CodexCliProvider,
     OpenAICompatibleProvider,
     ProviderPool,
     ProviderProtocol,
@@ -65,7 +66,8 @@ def build_provider_pool(
                     f"external provider command is not available: "
                     f"{provider_config.external_command}"
                 )
-            providers[provider_id] = ClaudeCodeProvider(
+            provider_class = CodexCliProvider if provider_id == "openai-codex" else ClaudeCodeProvider
+            providers[provider_id] = provider_class(
                 provider_config.external_command,
                 timeout_seconds=provider_config.timeout_seconds,
             )

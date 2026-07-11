@@ -1,4 +1,5 @@
 from .anthropic import AnthropicMessagesProvider
+from .codex_cli import CodexCliProvider
 from .catalog import (
     AuthType,
     ProviderDescriptor,
@@ -7,6 +8,7 @@ from .catalog import (
 )
 from .external_cli import ClaudeCodeProvider, CommandResult
 from .messages import ChatMessage, ChatRequest, ChatResponse, ToolCall
+from .model_catalog import available_models
 from .pool import ProviderPool
 from .router import ModelProfile, ModelRouter, RoutingDecision, TaskSignals
 from .provider import (
@@ -30,6 +32,7 @@ __all__ = [
     "ChatRequest",
     "ChatResponse",
     "ClaudeCodeProvider",
+    "CodexCliProvider",
     "CommandResult",
     "DemoProvider",
     "AuthType",
@@ -53,4 +56,5 @@ __all__ = [
     "TaskSignals",
     "ToolCall",
     "builtin_provider_catalog",
+    "available_models",
 ]

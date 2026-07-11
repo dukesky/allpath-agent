@@ -87,6 +87,9 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Suppressed live-provider and advanced-routing lessons in starter mode and marked them unavailable until configured.
 - Added resumable conversational model setup for OpenAI, Anthropic, OpenRouter, Ollama, and Claude Code.
 - Added context-aware input hints for starter discovery and each model setup step.
+- Added arrow-key provider/model selectors with searchable model lists.
+- Added OpenAI Codex account auth through the official `codex login` and `codex exec` interfaces.
+- Added account-aware Codex model discovery from the official CLI cache with offline fallbacks.
 - Added hidden API-key input and a mode-`0600` local secret store excluded from messages, workflow state, logs, and config.
 - Added real provider verification before atomic configuration replacement and same-session live-mode switching.
 - Preserved existing configuration and discarded new secrets when verification fails.

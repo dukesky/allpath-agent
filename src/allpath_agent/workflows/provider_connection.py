@@ -13,6 +13,7 @@ from allpath_agent.models import (
     ChatRequest,
     ModelProfile,
     ProviderProtocol,
+    available_models,
 )
 from allpath_agent.provider_runtime import build_provider_pool
 from allpath_agent.secrets import SecretStore
@@ -44,6 +45,16 @@ CHOICES: tuple[ProviderChoice, ...] = (
         AuthType.API_KEY,
         base_url="https://api.openai.com/v1",
         api_key_env="OPENAI_API_KEY",
+    ),
+    ProviderChoice(
+        "openai-codex",
+        "OpenAI Codex / ChatGPT account",
+        ProviderProtocol.EXTERNAL_CLI,
+        AuthType.EXTERNAL_CLI,
+        external_command="codex",
+        default_model="gpt-5.4",
+        supports_tools=False,
+        timeout_seconds=300.0,
     ),
     ProviderChoice(
         "anthropic",
@@ -109,6 +120,21 @@ class ProviderConnectionWorkflow:
     def active(self, session_id: str) -> bool:
         return self._runs.get_active(session_id, WORKFLOW_ID) is not None
 
+    def current_step(self, session_id: str) -> str | None:
+        active = self._runs.get_active(session_id, WORKFLOW_ID)
+        return active["current_step"] if active else None
+
+    def selected_provider(self, session_id: str) -> str | None:
+        active = self._runs.get_active(session_id, WORKFLOW_ID)
+        return active["state"].get("provider") if active else None
+
+    def provider_options(self) -> tuple[str, ...]:
+        return tuple(choice.label for choice in CHOICES)
+
+    def model_options(self, session_id: str) -> tuple[str, ...]:
+        provider_id = self.selected_provider(session_id)
+        return available_models(provider_id) if provider_id else ()
+
     def input_hint(self, session_id: str) -> str | None:
         active = self._runs.get_active(session_id, WORKFLOW_ID)
         if active is None:
@@ -117,8 +143,8 @@ class ProviderConnectionWorkflow:
         if active["current_step"] == "choose_provider":
             return _text(
                 language,
-                "输入 1–5 选择模型服务，或输入“取消”",
-                "Type 1–5 to choose a provider, or type cancel",
+                f"输入 1–{len(CHOICES)} 选择模型服务，或输入“取消”",
+                f"Type 1–{len(CHOICES)} to choose a provider, or type cancel",
             )
         if active["current_step"] == "choose_model":
             choice = _choice_by_id(active["state"]["provider"])
@@ -162,7 +188,13 @@ class ProviderConnectionWorkflow:
             if choice is None:
                 return ConnectionFlowResult(
                     True,
-                    (_text(language, "请选择 1–5，或输入“取消”。", "Choose 1–5, or type cancel."),),
+                    (
+                        _text(
+                            language,
+                            f"请选择 1–{len(CHOICES)}，或输入“取消”。",
+                            f"Choose 1–{len(CHOICES)}, or type cancel.",
+                        ),
+                    ),
                 )
             state["provider"] = choice.id
             self._runs.update(active["id"], "choose_model", state)
@@ -362,10 +394,13 @@ def _resolve_choice(value: str) -> ProviderChoice | None:
     normalized = value.strip().lower()
     aliases = {
         "1": "openai",
-        "2": "anthropic",
-        "3": "openrouter",
-        "4": "ollama",
-        "5": "claude-code",
+        "2": "openai-codex",
+        "3": "anthropic",
+        "4": "openrouter",
+        "5": "ollama",
+        "6": "claude-code",
+        "codex": "openai-codex",
+        "chatgpt": "openai-codex",
         "claude": "claude-code",
         "claude code": "claude-code",
     }
@@ -390,13 +425,13 @@ def _provider_prompt(language: str) -> str:
     if language == "zh":
         return (
             "我们在当前对话中连接模型。请选择：\n"
-            "1. OpenAI API\n2. Anthropic API\n3. OpenRouter\n"
-            "4. Ollama（本地）\n5. Claude Code 账号\n输入“取消”可退出。"
+            "1. OpenAI API\n2. OpenAI Codex / ChatGPT 账号\n3. Anthropic API\n"
+            "4. OpenRouter\n5. Ollama（本地）\n6. Claude Code 账号\n输入“取消”可退出。"
         )
     return (
         "Let's connect a model in this conversation. Choose:\n"
-        "1. OpenAI API\n2. Anthropic API\n3. OpenRouter\n"
-        "4. Ollama (local)\n5. Claude Code account\nType cancel to stop."
+        "1. OpenAI API\n2. OpenAI Codex / ChatGPT account\n3. Anthropic API\n"
+        "4. OpenRouter\n5. Ollama (local)\n6. Claude Code account\nType cancel to stop."
     )
 
 

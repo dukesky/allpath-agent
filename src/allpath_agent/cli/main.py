@@ -34,10 +34,13 @@ from allpath_agent.storage import (
 from allpath_agent.tools import ToolRuntime, create_builtin_registry
 from allpath_agent.workflows import ProviderConnectionWorkflow
 
+from .account_auth import ensure_codex_login
 from .approvals import TerminalApprovalHandler
+from .selector import terminal_select
 
 
 Output = Callable[[str], None]
+Selector = Callable[[str, Sequence[str], bool], int | None]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -80,6 +83,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print,
             _stderr,
             getpass.getpass,
+            terminal_select,
         )
     except ConfigError as error:
         _stderr(f"Configuration error: {error}")
@@ -107,6 +111,7 @@ def _chat(
     output: Output,
     error_output: Output,
     secret_input_fn: Callable[[str], str] | None = None,
+    selector_fn: Selector | None = None,
 ) -> int:
     sessions = SessionRepository(database)
     messages = MessageRepository(database)
@@ -163,6 +168,9 @@ def _chat(
                 "/capabilities, /dismiss [capability-id], /exit"
             )
             continue
+        if user_message.startswith("/help "):
+            output("/help does not take a question. Ask it directly, for example: what should I do next?")
+            continue
         if user_message == "/new":
             active_session_id = sessions.create().id
             application.start_session(active_session_id)
@@ -202,6 +210,14 @@ def _chat(
         if connection_result.handled:
             for message in connection_result.messages:
                 output(f"Agent [setup]> {message}")
+            if selector_fn is not None:
+                connection_result = _run_connection_selectors(
+                    connection_workflow,
+                    active_session_id,
+                    connection_result,
+                    selector_fn,
+                    output,
+                )
             if connection_result.request_secret:
                 try:
                     secret = hidden_input("API key (hidden)> ")
@@ -226,7 +242,6 @@ def _chat(
                 application.start_session(active_session_id)
                 application.record_capability_success("live_provider")
             continue
-
         try:
             current_session = sessions.get(active_session_id)
             if current_session and current_session.title is None:
@@ -256,6 +271,45 @@ def _chat(
             )
         if result.suggestion:
             output(f"Tip [{result.suggestion.capability_id}]: {result.suggestion.message}")
+
+
+def _run_connection_selectors(
+    workflow: ProviderConnectionWorkflow,
+    session_id: str,
+    result,
+    selector: Selector,
+    output: Output,
+):
+    while result.handled and not result.request_secret and not result.completed:
+        step = workflow.current_step(session_id)
+        if step == "choose_provider":
+            selected = selector(
+                "Connect a model — choose provider",
+                workflow.provider_options(),
+                False,
+            )
+            if selected is None:
+                return result
+            result = workflow.handle(session_id, str(selected + 1))
+        elif step == "choose_model":
+            provider_id = workflow.selected_provider(session_id)
+            if provider_id == "openai-codex":
+                connected, message = ensure_codex_login()
+                output(f"Agent [setup]> {message}")
+                if not connected:
+                    return workflow.handle(session_id, "cancel")
+            models = workflow.model_options(session_id)
+            if not models:
+                return result
+            selected = selector("Choose a model — / to search", models, True)
+            if selected is None:
+                return result
+            result = workflow.handle(session_id, models[selected])
+        else:
+            return result
+        for message in result.messages:
+            output(f"Agent [setup]> {message}")
+    return result
 
 
 def _build_application(

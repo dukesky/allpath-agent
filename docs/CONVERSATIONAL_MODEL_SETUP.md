@@ -8,19 +8,32 @@ Start with a natural request:
 You> connect a model
 Agent [setup]> Let's connect a model in this conversation. Choose:
 1. OpenAI API
-2. Anthropic API
-3. OpenRouter
-4. Ollama (local)
-5. Claude Code account
+2. OpenAI Codex / ChatGPT account
+3. Anthropic API
+4. OpenRouter
+5. Ollama (local)
+6. Claude Code account
 ```
 
-The workflow asks for a model ID, requests a credential only when the selected provider needs one, verifies a real response, writes configuration atomically, and rebuilds the running Agent application in live mode without changing the session.
+In an interactive terminal, provider and model choices open an arrow-key picker.
+Use `↑`/`↓`, Enter to select, Esc to cancel, and `/` to search the model list.
+Non-interactive terminals retain the numbered/text fallback.
+
+The workflow requests a credential only when the selected provider needs one,
+verifies a real response, writes configuration atomically, and rebuilds the
+running Agent application in live mode without changing the session.
 
 ## Authentication paths
 
 - OpenAI, Anthropic, and OpenRouter request an API key through hidden terminal input.
+- OpenAI Codex reuses the official Codex CLI. Allpath checks `codex login status`,
+  starts `codex login` when necessary, and runs models through `codex exec`.
 - Ollama verifies its local OpenAI-compatible endpoint and requires no key.
 - Claude Code invokes the existing authenticated `claude` command and never extracts its account token.
+
+Allpath never copies or stores Codex OAuth tokens. Codex model choices are read
+from the official CLI's account-aware model cache and ordered by its priority
+metadata. A curated list is used only when that cache is unavailable.
 
 ## Secret boundary
 

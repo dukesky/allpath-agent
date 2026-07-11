@@ -61,7 +61,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         database.initialize()
         if args.command == "sessions":
             return _list_sessions(SessionRepository(database), args.limit, print)
-        return _chat(home, database, args.demo, args.session, input, print, _stderr)
+        starter_mode = not (home / "config.toml").is_file()
+        return _chat(
+            home,
+            database,
+            args.demo or starter_mode,
+            args.session,
+            input,
+            print,
+            _stderr,
+        )
     except ConfigError as error:
         _stderr(f"Configuration error: {error}")
         return 2
@@ -75,7 +84,7 @@ def _initialize(home: Path) -> int:
     write_default_config(config_path)
     print(f"Created {config_path}")
     print("Edit provider settings and model names, then set the configured API key variables.")
-    print("You can run 'allpath-agent --demo' immediately without an API key.")
+    print("Run 'allpath-agent' to chat after replacing the placeholder model names.")
     return 0
 
 
@@ -101,8 +110,11 @@ def _chat(
     application.start_session(session.id)
     if requested_session_id:
         application.record_capability_success("session_management")
-    mode = "demo" if demo else "live"
+    mode = "local starter" if demo else "live"
     output(f"Allpath Agent ({mode} mode)")
+    if demo:
+        output("No model account is required yet. Your tools, memory, and sessions run locally.")
+        output("When you want real model reasoning, ask me about connecting a model.")
     output(f"Session: {session.id}")
     output("Type /help for commands or /exit to quit.")
 

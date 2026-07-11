@@ -136,6 +136,24 @@ class DemoProvider:
                 ),
                 finish_reason="tool_calls",
             )
+        if any(
+            phrase in lowered
+            for phrase in (
+                "connect a model",
+                "connecting a model",
+                "connect a provider",
+                "连接模型",
+                "模型配置",
+            )
+        ):
+            return ChatResponse(
+                content=(
+                    "I can help you connect a real model. The current MVP supports "
+                    "OpenAI, Anthropic, OpenRouter, Ollama, and Claude Code. Run "
+                    "`allpath-agent init` once to create provider settings; this "
+                    "local session will remain available."
+                )
+            )
         return ChatResponse(content=f"Demo response: {content}")
 
     def _tool_call(self, name: str, arguments: dict[str, Any]) -> ToolCall:

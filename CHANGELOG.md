@@ -74,6 +74,12 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added structured retry, terminal failure, and task interruption events without response-body logging.
 - Marked interrupted tool executions terminal and repaired all unresolved tool-result messages in the Agent Loop.
 - Added HTTP classification, retry-budget, backoff, timeout, and multi-tool interruption tests.
+- Added a one-line Linux/macOS installer that manages Python, an isolated virtual environment, package installation, PATH, and first launch.
+- Added an offline `--local` installation mode that links the current checkout for rapid development testing.
+- Made fresh `allpath-agent` launches enter local starter mode instead of failing on a missing configuration.
+- Added conversational provider-setup intent detection without forcing a first-run setup wizard.
+- Added direct starter-mode provider guidance so explicit setup questions are never blocked by proactive-tip limits.
+- Added an isolated, idempotent installer E2E test that launches the installed command.
 
 ### Changed
 

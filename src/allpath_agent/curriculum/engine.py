@@ -54,7 +54,7 @@ class CurriculumEngine:
             for capability_id, state in progress.items()
             if state.status in {LearningStatus.SUCCEEDED, LearningStatus.HABITUAL}
         }
-        candidates: list[tuple[int, Capability]] = []
+        candidates: list[tuple[bool, int, Capability]] = []
 
         for capability in self._capabilities.values():
             state = progress.get(capability.id)
@@ -74,13 +74,19 @@ class CurriculumEngine:
             if not set(capability.prerequisite_ids).issubset(completed):
                 continue
 
-            relevance = 30 if capability.trigger_intents.intersection(intents) else 0
+            is_relevant = bool(capability.trigger_intents.intersection(intents))
+            relevance = 30 if is_relevant else 0
             offer_penalty = (state.offer_count * 20) if state else 0
             fatigue_penalty = 25 if state and state.sessions_since_offer == 0 else 0
             score = capability.base_priority + relevance - capability.setup_effort - offer_penalty - fatigue_penalty
-            candidates.append((score, capability))
+            candidates.append((is_relevant, score, capability))
 
         if not candidates:
             return None
-        score, capability = max(candidates, key=lambda item: (item[0], item[1].id))
+        relevant_candidates = [candidate for candidate in candidates if candidate[0]]
+        selected_pool = relevant_candidates or candidates
+        _, score, capability = max(
+            selected_pool,
+            key=lambda item: (item[1], item[2].id),
+        )
         return capability if score > 0 else None

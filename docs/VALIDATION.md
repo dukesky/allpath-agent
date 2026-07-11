@@ -126,6 +126,8 @@ Real API tests are intentionally separate from default CI because they require s
 - Transient failures retry with bounded backoff and cannot exceed the model-call limit.
 - Authentication and malformed-response failures do not retry.
 - Tool interruption persists an `interrupted` execution and closes every tool-call lifecycle.
+- A real installer subprocess creates an isolated venv, command wrapper, and runnable local starter session.
+- Re-running the local installer preserves a working installation without network access.
 
 The default suite now validates all of these behaviors against temporary SQLite databases and through the real CLI subprocess.
 

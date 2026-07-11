@@ -129,7 +129,14 @@ def detect_intents(message: str) -> set[str]:
         "session": ("session", "resume", "会话", "继续之前"),
         "deep_analysis": ("deep analysis", "analyze deeply", "深入分析", "详细分析"),
         "approval": ("approve", "permission", "批准", "权限"),
-        "provider": ("provider", "api key", "模型配置"),
+        "provider": (
+            "provider",
+            "api key",
+            "connect a model",
+            "connecting a model",
+            "模型配置",
+            "连接模型",
+        ),
     }
     for intent, phrases in mappings.items():
         if any(phrase in lowered for phrase in phrases):

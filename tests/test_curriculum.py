@@ -32,6 +32,24 @@ class CurriculumEngineTestCase(unittest.TestCase):
         self.assertIsNotNone(recommendation)
         self.assertEqual(recommendation.id, "calendar")
 
+    def test_explicit_intent_beats_unrelated_frequency_priority(self) -> None:
+        engine = CurriculumEngine(
+            [
+                Capability("common", "Common", 100),
+                Capability(
+                    "provider",
+                    "Provider",
+                    20,
+                    trigger_intents=frozenset({"provider"}),
+                    setup_effort=10,
+                ),
+            ]
+        )
+
+        recommendation = engine.recommend({"provider"}, {})
+
+        self.assertEqual(recommendation.id, "provider")
+
     def test_prerequisite_blocks_advanced_capability(self) -> None:
         engine = CurriculumEngine(
             [Capability("daily_brief", "Daily brief", 90, prerequisite_ids=("calendar",))]

@@ -105,6 +105,20 @@ src/allpath_agent/
 
 Detailed design is documented in [Architecture](docs/ARCHITECTURE.md) and [Product design](docs/PRODUCT_DESIGN.md).
 
+## Quick install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dukesky/allpath-agent/main/scripts/install.sh | sh
+```
+
+The installer manages Python and the virtual environment, installs the `allpath-agent` command, and opens the first local conversation. No API key or setup wizard is required to begin.
+
+For local development from this checkout:
+
+```bash
+./scripts/install.sh --local
+```
+
 ## Development setup
 
 Requirements:
@@ -132,13 +146,13 @@ The underlying standard-library suite can also run directly:
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-Run immediately in deterministic offline demo mode:
+Run directly. Without a provider configuration, Allpath automatically enters deterministic local starter mode:
 
 ```bash
-allpath-agent --demo
+allpath-agent
 ```
 
-The demo requires no API key and exercises conversation, routing, tools, approvals, SQLite persistence, and session resume.
+Starter mode requires no API key and exercises conversation, routing, tools, approvals, SQLite persistence, and session resume. `allpath-agent --demo` remains available when explicit demo behavior is useful.
 
 Create a live-provider configuration:
 
@@ -221,6 +235,7 @@ Set model prices from the provider's current pricing page before enabling a nonz
 
 - [Product design](docs/PRODUCT_DESIGN.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Installation](docs/INSTALLATION.md)
 - [Model providers and authentication](docs/PROVIDERS.md)
 - [Task budgets and structured logs](docs/BUDGETS_AND_LOGS.md)
 - [Failure recovery](docs/FAILURE_RECOVERY.md)

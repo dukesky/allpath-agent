@@ -130,15 +130,26 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertIn("basic_chat", result.stdout)
         self.assertIn("live_provider", result.stdout)
 
-    def test_init_and_missing_live_config_errors(self) -> None:
+    def test_starter_conversation_introduces_provider_setup_on_request(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = run_cli(
+                Path(directory),
+                "hello\nhow do I connect a model?\n/exit\n",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("I can help you connect a real model", result.stdout)
+        self.assertIn("allpath-agent init", result.stdout)
+
+    def test_first_launch_enters_local_starter_mode_without_config(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
-            missing = run_cli(home)
+            first_launch = run_cli(home, "hello\n/exit\n")
             initialized = run_cli(home, "", "init")
             repeated = run_cli(home, "", "init")
 
-        self.assertEqual(missing.returncode, 2)
-        self.assertIn("allpath-agent init", missing.stderr)
+        self.assertEqual(first_launch.returncode, 0, first_launch.stderr)
+        self.assertIn("local starter mode", first_launch.stdout)
+        self.assertIn("Demo response: hello", first_launch.stdout)
         self.assertEqual(initialized.returncode, 0, initialized.stderr)
         self.assertEqual(repeated.returncode, 2)
         self.assertIn("already exists", repeated.stderr)

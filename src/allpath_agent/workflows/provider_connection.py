@@ -109,6 +109,30 @@ class ProviderConnectionWorkflow:
     def active(self, session_id: str) -> bool:
         return self._runs.get_active(session_id, WORKFLOW_ID) is not None
 
+    def input_hint(self, session_id: str) -> str | None:
+        active = self._runs.get_active(session_id, WORKFLOW_ID)
+        if active is None:
+            return None
+        language = active["state"].get("language", "en")
+        if active["current_step"] == "choose_provider":
+            return _text(
+                language,
+                "输入 1–5 选择模型服务，或输入“取消”",
+                "Type 1–5 to choose a provider, or type cancel",
+            )
+        if active["current_step"] == "choose_model":
+            choice = _choice_by_id(active["state"]["provider"])
+            if choice.default_model:
+                return _text(
+                    language,
+                    f"输入模型 ID；直接回车使用 {choice.default_model}",
+                    f"Enter a model ID; press Enter for {choice.default_model}",
+                )
+            return _text(language, "输入模型 ID", "Enter a model ID")
+        if active["current_step"] == "awaiting_secret":
+            return _text(language, "API Key 将隐藏输入", "API key input will be hidden")
+        return None
+
     def handle(self, session_id: str, message: str) -> ConnectionFlowResult:
         active = self._runs.get_active(session_id, WORKFLOW_ID)
         if active is None:

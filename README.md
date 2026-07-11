@@ -49,6 +49,10 @@ Models are configured as logical profiles:
 
 The router chooses one model at the beginning of a task and only escalates upward when execution reveals greater difficulty. It does not switch models on every tool call.
 
+Model setup and starter mode show contextual hints next to the terminal input.
+The hint changes with the active step—for example, provider choices, the default
+model accepted by pressing Enter, cancellation, and hidden API-key entry.
+
 ### Narrow core, capabilities at the edges
 
 The core owns conversation state, model calls, tool execution, persistence, interruption, and workflow boundaries. Calendar, Slack, WhatsApp, and other integrations belong in connectors rather than inside the core loop.

@@ -101,6 +101,13 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
         )
         self.assertEqual(self.secrets.values(), {})
 
+    def test_input_hint_tracks_current_workflow_step(self) -> None:
+        self.workflow.handle(self.session.id, "连接模型")
+        self.assertIn("1–5", self.workflow.input_hint(self.session.id))
+
+        self.workflow.handle(self.session.id, "5")
+        self.assertIn("sonnet", self.workflow.input_hint(self.session.id))
+
     def test_cancel_marks_resumable_run_terminal(self) -> None:
         self.workflow.handle(self.session.id, "connect model")
         cancelled = self.workflow.handle(self.session.id, "cancel")

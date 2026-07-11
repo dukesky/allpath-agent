@@ -138,7 +138,11 @@ def _chat(
     active_session_id = session.id
     while True:
         try:
-            user_message = input_fn("You> ").strip()
+            input_hint = connection_workflow.input_hint(active_session_id)
+            if input_hint is None and demo:
+                input_hint = "Try: 连接模型 · what can you do · calculate 18 * 7"
+            prompt = f"You>  ({input_hint})\n> " if input_hint else "You> "
+            user_message = input_fn(prompt).strip()
         except EOFError:
             output("")
             output("Goodbye.")

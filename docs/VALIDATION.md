@@ -128,6 +128,10 @@ Real API tests are intentionally separate from default CI because they require s
 - Tool interruption persists an `interrupted` execution and closes every tool-call lifecycle.
 - A real installer subprocess creates an isolated venv, command wrapper, and runnable local starter session.
 - Re-running the local installer preserves a working installation without network access.
+- Provider connection state survives workflow reconstruction from SQLite.
+- API keys use hidden input, never enter workflow state or config, and persist with mode `0600` only after verification.
+- Failed verification preserves existing configuration and stores no new secret.
+- A fake authenticated Claude Code executable validates the complete chat-to-live-mode CLI path.
 
 The default suite now validates all of these behaviors against temporary SQLite databases and through the real CLI subprocess.
 

@@ -10,6 +10,7 @@ from .repositories import (
     SessionRepository,
     ToolApprovalRepository,
     ToolExecutionRepository,
+    WorkflowRunRepository,
 )
 
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     "SessionRepository",
     "ToolApprovalRepository",
     "ToolExecutionRepository",
+    "WorkflowRunRepository",
 ]

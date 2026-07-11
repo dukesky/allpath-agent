@@ -12,6 +12,7 @@ from allpath_agent.storage import (
     RoutingDecisionRepository,
     SessionRepository,
     ToolExecutionRepository,
+    WorkflowRunRepository,
 )
 
 
@@ -94,6 +95,27 @@ class StorageTestCase(unittest.TestCase):
     def test_messages_require_existing_session(self) -> None:
         with self.assertRaises(Exception):
             MessageRepository(self.database).append("missing", "user", "Hello")
+
+    def test_workflow_run_state_round_trip(self) -> None:
+        session = SessionRepository(self.database).create(session_id="workflow-session")
+        workflows = WorkflowRunRepository(self.database)
+        created = workflows.create(
+            "provider_connection",
+            session.id,
+            "choose_provider",
+            {"language": "en"},
+        )
+        updated = workflows.update(
+            created["id"],
+            "choose_model",
+            {"language": "en", "provider": "openai"},
+        )
+
+        self.assertEqual(updated["state"]["provider"], "openai")
+        self.assertEqual(
+            workflows.get_active(session.id, "provider_connection")["current_step"],
+            "choose_model",
+        )
 
 
 if __name__ == "__main__":

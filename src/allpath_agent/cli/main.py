@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -16,6 +17,7 @@ from allpath_agent.provider_runtime import (
     build_provider_pool,
     provider_statuses,
 )
+from allpath_agent.secrets import SecretStore
 from allpath_agent.storage import (
     CapabilityProgressRepository,
     CapabilitySuggestionRepository,
@@ -27,8 +29,10 @@ from allpath_agent.storage import (
     SessionRepository,
     ToolApprovalRepository,
     ToolExecutionRepository,
+    WorkflowRunRepository,
 )
 from allpath_agent.tools import ToolRuntime, create_builtin_registry
+from allpath_agent.workflows import ProviderConnectionWorkflow
 
 from .approvals import TerminalApprovalHandler
 
@@ -56,7 +60,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "init":
             return _initialize(home)
         if args.command == "providers":
-            return _show_providers(load_config(home / "config.toml"), print)
+            environment = SecretStore(home / "secrets.json").merged_environment()
+            return _show_providers(
+                load_config(home / "config.toml"),
+                print,
+                environment,
+            )
         database = Database(home / "state.db")
         database.initialize()
         if args.command == "sessions":
@@ -70,6 +79,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             input,
             print,
             _stderr,
+            getpass.getpass,
         )
     except ConfigError as error:
         _stderr(f"Configuration error: {error}")
@@ -96,6 +106,7 @@ def _chat(
     input_fn: Callable[[str], str],
     output: Output,
     error_output: Output,
+    secret_input_fn: Callable[[str], str] | None = None,
 ) -> int:
     sessions = SessionRepository(database)
     messages = MessageRepository(database)
@@ -107,6 +118,12 @@ def _chat(
         session = sessions.create()
 
     application = _build_application(home, database, demo, input_fn, output)
+    connection_workflow = ProviderConnectionWorkflow(
+        home / "config.toml",
+        WorkflowRunRepository(database),
+        SecretStore(home / "secrets.json"),
+    )
+    hidden_input = secret_input_fn or getpass.getpass
     application.start_session(session.id)
     if requested_session_id:
         application.record_capability_success("session_management")
@@ -131,7 +148,7 @@ def _chat(
             output("Interrupted. Session state is saved.")
             return 130
 
-        if not user_message:
+        if not user_message and not connection_workflow.active(active_session_id):
             continue
         if user_message in {"/exit", "/quit"}:
             output("Goodbye.")
@@ -172,6 +189,38 @@ def _chat(
                 output("Capability suggestion dismissed.")
             else:
                 error_output("No capability suggestion found to dismiss.")
+            continue
+
+        connection_result = connection_workflow.handle(
+            active_session_id,
+            user_message,
+        )
+        if connection_result.handled:
+            for message in connection_result.messages:
+                output(f"Agent [setup]> {message}")
+            if connection_result.request_secret:
+                try:
+                    secret = hidden_input("API key (hidden)> ")
+                except (EOFError, KeyboardInterrupt):
+                    output("")
+                    error_output("Secret input cancelled. Connection setup is still resumable.")
+                    continue
+                connection_result = connection_workflow.submit_secret(
+                    active_session_id,
+                    secret,
+                )
+                for message in connection_result.messages:
+                    output(f"Agent [setup]> {message}")
+            if connection_result.completed:
+                application = _build_application(
+                    home,
+                    database,
+                    False,
+                    input_fn,
+                    output,
+                )
+                application.start_session(active_session_id)
+                application.record_capability_success("live_provider")
             continue
 
         try:
@@ -227,7 +276,8 @@ def _build_application(
         config = load_config(home / "config.toml")
         if any(profile.model.startswith("replace-with-") for profile in config.models):
             raise ConfigError("config.toml still contains placeholder model values")
-        provider = build_provider_pool(config)
+        environment = SecretStore(home / "secrets.json").merged_environment()
+        provider = build_provider_pool(config, environment)
         profiles = config.models
         system_prompt = config.agent.system_prompt
         max_model_calls = config.agent.max_model_calls
@@ -293,8 +343,12 @@ def _list_sessions(sessions: SessionRepository, limit: int, output: Output) -> i
     return 0
 
 
-def _show_providers(config: AppConfig, output: Output) -> int:
-    for status in provider_statuses(config):
+def _show_providers(
+    config: AppConfig,
+    output: Output,
+    environment: dict[str, str] | None = None,
+) -> int:
+    for status in provider_statuses(config, environment):
         if status.auth == "external_cli":
             state = "available" if status.connected else "missing"
         else:

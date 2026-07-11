@@ -68,6 +68,6 @@ def default_capabilities() -> list[Capability]:
             prerequisite_ids=("basic_chat",),
             trigger_intents=frozenset({"provider"}),
             setup_effort=20,
-            lesson="Run allpath-agent init to connect configured fast and advanced model profiles.",
+            lesson="Ask me to connect a model and I will guide and verify the setup in this conversation.",
         ),
     ]

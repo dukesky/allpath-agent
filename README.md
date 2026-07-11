@@ -154,13 +154,15 @@ allpath-agent
 
 Starter mode requires no API key and exercises natural arithmetic, time, memory, tools, approvals, SQLite persistence, and session resume. It follows Chinese or English input, answers capability questions directly, and explains when a request requires real model reasoning. Real-model routing lessons remain unavailable until a provider is connected. `allpath-agent --demo` remains available when explicit starter behavior is useful.
 
-Create a live-provider configuration:
+Connect a live provider from the conversation:
 
-```bash
-allpath-agent init
+```text
+You> connect a model
 ```
 
-Edit `~/.allpath-agent/config.toml`, set the configured API-key environment variable, then run:
+Allpath guides provider and model selection, uses hidden input for API keys, verifies the connection, and switches the current session to live mode. `allpath-agent init` remains available as a manual configuration fallback.
+
+After a provider is connected, run normally:
 
 ```bash
 allpath-agent
@@ -237,6 +239,7 @@ Set model prices from the provider's current pricing page before enabling a nonz
 - [Architecture](docs/ARCHITECTURE.md)
 - [Installation](docs/INSTALLATION.md)
 - [Model providers and authentication](docs/PROVIDERS.md)
+- [Conversational model setup](docs/CONVERSATIONAL_MODEL_SETUP.md)
 - [Task budgets and structured logs](docs/BUDGETS_AND_LOGS.md)
 - [Failure recovery](docs/FAILURE_RECOVERY.md)
 - [MVP implementation plan](docs/MVP_PLAN.md)

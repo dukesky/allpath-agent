@@ -443,3 +443,86 @@ class ToolApprovalRepository:
             record["arguments"] = json.loads(record.pop("arguments_json"))
             records.append(record)
         return records
+
+
+class WorkflowRunRepository:
+    def __init__(self, database: Database):
+        self._database = database
+
+    def create(
+        self,
+        workflow_id: str,
+        session_id: str,
+        current_step: str,
+        state: dict[str, Any],
+    ) -> dict[str, Any]:
+        run_id = str(uuid4())
+        now = utc_now()
+        with self._database.connect() as connection, connection:
+            connection.execute(
+                """
+                INSERT INTO workflow_runs(
+                    id, workflow_id, session_id, status, current_step,
+                    state_json, created_at, updated_at
+                ) VALUES (?, ?, ?, 'running', ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    workflow_id,
+                    session_id,
+                    current_step,
+                    _json(state),
+                    now,
+                    now,
+                ),
+            )
+        return self.get(run_id)
+
+    def get(self, run_id: str) -> dict[str, Any] | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM workflow_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+        return _workflow_record(row) if row else None
+
+    def get_active(self, session_id: str, workflow_id: str) -> dict[str, Any] | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM workflow_runs
+                WHERE session_id = ? AND workflow_id = ? AND status = 'running'
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (session_id, workflow_id),
+            ).fetchone()
+        return _workflow_record(row) if row else None
+
+    def update(
+        self,
+        run_id: str,
+        current_step: str | None,
+        state: dict[str, Any],
+        status: str = "running",
+    ) -> dict[str, Any]:
+        if status not in {"running", "succeeded", "failed", "cancelled"}:
+            raise ValueError(f"invalid workflow status: {status}")
+        with self._database.connect() as connection, connection:
+            cursor = connection.execute(
+                """
+                UPDATE workflow_runs
+                SET status = ?, current_step = ?, state_json = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (status, current_step, _json(state), utc_now(), run_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(f"workflow run does not exist: {run_id}")
+        return self.get(run_id)
+
+
+def _workflow_record(row: Any) -> dict[str, Any]:
+    record = dict(row)
+    record["state"] = json.loads(record.pop("state_json"))
+    return record

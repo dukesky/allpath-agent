@@ -85,6 +85,11 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added Chinese/English response matching for starter greetings, tools, capability summaries, setup guidance, and fallbacks.
 - Added direct answers for explicit “what can you do?” capability questions.
 - Suppressed live-provider and advanced-routing lessons in starter mode and marked them unavailable until configured.
+- Added resumable conversational model setup for OpenAI, Anthropic, OpenRouter, Ollama, and Claude Code.
+- Added hidden API-key input and a mode-`0600` local secret store excluded from messages, workflow state, logs, and config.
+- Added real provider verification before atomic configuration replacement and same-session live-mode switching.
+- Preserved existing configuration and discarded new secrets when verification fails.
+- Added workflow persistence, secret-boundary, failure-safety, and fake Claude Code CLI E2E tests.
 - Added an isolated, idempotent installer E2E test that launches the installed command.
 
 ### Changed

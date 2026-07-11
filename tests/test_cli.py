@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 from allpath_agent.cli.main import _chat
+from allpath_agent.config import load_config
 from allpath_agent.storage import (
     CapabilityProgressRepository,
     Database,
@@ -135,11 +136,42 @@ class CliEndToEndTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             result = run_cli(
                 Path(directory),
-                "hello\nhow do I connect a model?\n/exit\n",
+                "hello\nhow do I connect a model?\ncancel\n/exit\n",
             )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("I can help you connect a real model", result.stdout)
-        self.assertIn("allpath-agent init", result.stdout)
+        self.assertIn("Let's connect a model in this conversation", result.stdout)
+        self.assertIn("Model connection cancelled", result.stdout)
+
+    def test_conversation_connects_fake_claude_code_and_switches_live(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            fake_bin = home / "fake-bin"
+            fake_bin.mkdir()
+            fake_claude = fake_bin / "claude"
+            fake_claude.write_text(
+                "#!/bin/sh\nprintf '%s\\n' "
+                "' {\"type\":\"result\",\"subtype\":\"success\","
+                "\"result\":\"OK\"}'\n",
+                encoding="utf-8",
+            )
+            fake_claude.chmod(0o755)
+            previous_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = f"{fake_bin}:{previous_path}"
+            try:
+                result = run_cli(
+                    home,
+                    "connect a model\n5\n\n/exit\n",
+                )
+            finally:
+                os.environ["PATH"] = previous_path
+
+            config = load_config(home / "config.toml")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Claude Code account is connected and verified", result.stdout)
+        self.assertEqual(config.models[0].provider, "claude-code")
+        self.assertEqual(config.models[0].model, "sonnet")
+        self.assertFalse(config.models[0].supports_tools)
 
     def test_starter_understands_natural_arithmetic(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

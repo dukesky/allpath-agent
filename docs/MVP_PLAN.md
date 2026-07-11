@@ -120,6 +120,8 @@ Status: complete with eight implemented capabilities, persistent evidence, one s
 
 Status: multi-provider foundations, per-task budgets, privacy-safe JSONL logs, classified provider retries, interruption repair, managed one-line installation, and conversation-first local launch are complete. Database recovery and real-provider smoke tests remain.
 
+Conversational provider setup is complete for OpenAI, Anthropic, OpenRouter, Ollama, and Claude Code, including hidden secrets, verification, resumable workflow state, atomic configuration, and same-session live switching.
+
 - Add iteration, token, and estimated-cost budgets. Complete.
 - Add structured local logs. Complete.
 - Test recovery from provider and tool failures. Complete.

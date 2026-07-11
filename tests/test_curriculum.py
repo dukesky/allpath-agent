@@ -63,6 +63,27 @@ class CurriculumEngineTestCase(unittest.TestCase):
         }
         self.assertIsNone(engine.recommend(set(), progress))
 
+    def test_excluded_capability_is_not_recommended(self) -> None:
+        engine = CurriculumEngine(
+            [
+                Capability(
+                    "model_routing",
+                    "Model routing",
+                    100,
+                    trigger_intents=frozenset({"deep"}),
+                ),
+                Capability("memory", "Memory", 50),
+            ]
+        )
+
+        recommendation = engine.recommend(
+            {"deep"},
+            {},
+            frozenset({"model_routing"}),
+        )
+
+        self.assertEqual(recommendation.id, "memory")
+
 
 class CurriculumServiceTestCase(unittest.TestCase):
     def setUp(self) -> None:

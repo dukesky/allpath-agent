@@ -103,6 +103,7 @@ class DemoProvider:
 
     def complete(self, request: ChatRequest) -> ChatResponse:
         last_message = request.messages[-1]
+        use_chinese = _prefers_chinese(request.messages)
         if last_message.role == "tool":
             try:
                 payload = json.loads(last_message.content or "{}")
@@ -112,8 +113,20 @@ class DemoProvider:
                 result = payload.get("result")
                 tool_name = _tool_name_for_result(request.messages, last_message.tool_call_id)
                 if tool_name == "calculate" and isinstance(result, dict):
-                    return ChatResponse(content=f"The result is {result.get('result')}.")
+                    answer = (
+                        f"结果是 {result.get('result')}。"
+                        if use_chinese
+                        else f"The result is {result.get('result')}."
+                    )
+                    return ChatResponse(content=answer)
                 if tool_name == "current_datetime" and isinstance(result, dict):
+                    if use_chinese:
+                        return ChatResponse(
+                            content=(
+                                f"{result.get('timezone')} 当前时间是 "
+                                f"{result.get('time')}。"
+                            )
+                        )
                     return ChatResponse(
                         content=(
                             f"The current time in {result.get('timezone')} is "
@@ -121,7 +134,12 @@ class DemoProvider:
                         )
                     )
                 if tool_name == "memory_set":
-                    return ChatResponse(content="I saved that preference locally.")
+                    answer = (
+                        "我已经在本地保存了这个偏好。"
+                        if use_chinese
+                        else "I saved that preference locally."
+                    )
+                    return ChatResponse(content=answer)
                 return ChatResponse(content=f"The local tool completed: {result}")
             error = payload.get("error") or {}
             return ChatResponse(content=f"Demo tool was not completed: {error.get('message', 'unknown error')}")
@@ -160,6 +178,14 @@ class DemoProvider:
                 "模型配置",
             )
         ):
+            if use_chinese:
+                return ChatResponse(
+                    content=(
+                        "我可以帮助你连接真实模型。目前支持 OpenAI、Anthropic、"
+                        "OpenRouter、Ollama 和 Claude Code。当前 MVP 可以先运行一次 "
+                        "`allpath-agent init` 创建模型配置；现有本地会话会继续保留。"
+                    )
+                )
             return ChatResponse(
                 content=(
                     "I can help you connect a real model. The current MVP supports "
@@ -168,11 +194,43 @@ class DemoProvider:
                     "local session will remain available."
                 )
             )
+        if _is_capability_question(lowered):
+            if use_chinese:
+                return ChatResponse(
+                    content=(
+                        "目前在本地模式下，我可以帮你安全计算、查询日期和时间、"
+                        "保存长期偏好、管理和恢复会话、演示工具权限，并指导你连接"
+                        "真实模型。连接模型后，我还可以处理开放式问答、规划和复杂推理。"
+                    )
+                )
+            return ChatResponse(
+                content=(
+                    "In local mode I can safely calculate, check dates and times, "
+                    "save durable preferences, manage and resume sessions, demonstrate "
+                    "tool approvals, and guide you through connecting a real model. "
+                    "After a model is connected, I can handle open-ended questions, "
+                    "planning, and complex reasoning."
+                )
+            )
         if lowered.strip() in {"hello", "hi", "hey", "你好", "嗨"}:
+            if use_chinese:
+                return ChatResponse(
+                    content=(
+                        "你好！我正在本地运行。你可以让我计算、查询时间、保存偏好、"
+                        "管理会话，或者询问如何连接真实模型。"
+                    )
+                )
             return ChatResponse(
                 content=(
                     "Hello! I'm running locally. You can try arithmetic, time, "
                     "memory, sessions, or ask how to connect a model."
+                )
+            )
+        if use_chinese:
+            return ChatResponse(
+                content=(
+                    "我目前在没有推理模型的本地模式下运行，所以暂时无法理解这个请求。"
+                    "现在可以处理计算、日期时间、长期偏好、会话管理和模型连接指导。"
                 )
             )
         return ChatResponse(
@@ -231,6 +289,30 @@ def _tool_name_for_result(
             if tool_call.id == tool_call_id:
                 return tool_call.name
     return None
+
+
+def _prefers_chinese(messages: tuple[ChatMessage, ...]) -> bool:
+    for message in reversed(messages):
+        if message.role == "user" and message.content:
+            return bool(re.search(r"[\u3400-\u9fff]", message.content))
+    return False
+
+
+def _is_capability_question(lowered: str) -> bool:
+    return any(
+        phrase in lowered
+        for phrase in (
+            "what can you do",
+            "what are your capabilities",
+            "what features do you have",
+            "how can you help",
+            "你能做什么",
+            "你可以做什么",
+            "你会什么",
+            "有什么功能",
+            "你能帮我什么",
+        )
+    )
 
 
 def _serialize_message(message: ChatMessage) -> dict[str, Any]:

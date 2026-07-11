@@ -48,6 +48,7 @@ class CurriculumEngine:
         self,
         intents: set[str],
         progress: dict[str, CapabilityProgress],
+        excluded_capability_ids: frozenset[str] = frozenset(),
     ) -> Capability | None:
         completed = {
             capability_id
@@ -57,6 +58,8 @@ class CurriculumEngine:
         candidates: list[tuple[bool, int, Capability]] = []
 
         for capability in self._capabilities.values():
+            if capability.id in excluded_capability_ids:
+                continue
             state = progress.get(capability.id)
             if state and state.status in {
                 LearningStatus.SUCCEEDED,

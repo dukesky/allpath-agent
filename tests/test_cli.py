@@ -129,6 +129,7 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("basic_chat", result.stdout)
         self.assertIn("live_provider", result.stdout)
+        self.assertRegex(result.stdout, r"live_provider\s+unavailable")
 
     def test_starter_conversation_introduces_provider_setup_on_request(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -148,7 +149,7 @@ class CliEndToEndTestCase(unittest.TestCase):
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("The result is 7.", result.stdout)
-        self.assertIn("The result is 12.", result.stdout)
+        self.assertIn("结果是 12。", result.stdout)
 
     def test_starter_explains_reasoning_limit_instead_of_echoing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -156,6 +157,18 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("without a reasoning model", result.stdout)
         self.assertNotIn("Demo response", result.stdout)
+
+    def test_starter_matches_chinese_and_answers_capability_questions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = run_cli(
+                Path(directory),
+                "你好\n你能做什么\n/exit\n",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("你好！我正在本地运行", result.stdout)
+        self.assertIn("目前在本地模式下，我可以帮你安全计算", result.stdout)
+        self.assertNotIn("Tip [model_routing]", result.stdout)
+        self.assertNotIn("Tip [live_provider]", result.stdout)
 
     def test_first_launch_enters_local_starter_mode_without_config(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

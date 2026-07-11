@@ -25,11 +25,13 @@ class CurriculumService:
         progress: CapabilityProgressRepository,
         suggestions: CapabilitySuggestionRepository,
         sessions: CurriculumSessionRepository,
+        suppressed_capability_ids: set[str] | None = None,
     ):
         self._engine = engine
         self._progress = progress
         self._suggestions = suggestions
         self._sessions = sessions
+        self._suppressed_capability_ids = frozenset(suppressed_capability_ids or ())
 
     def start_session(self, session_id: str) -> None:
         self._sessions.start_once(session_id)
@@ -57,7 +59,11 @@ class CurriculumService:
             )
             for capability_id, record in self._progress.list_all().items()
         }
-        capability = self._engine.recommend(intents, progress)
+        capability = self._engine.recommend(
+            intents,
+            progress,
+            self._suppressed_capability_ids,
+        )
         if capability is None:
             return None
 
@@ -111,7 +117,13 @@ class CurriculumService:
             (
                 capability.id,
                 capability.title,
-                progress[capability.id].status if capability.id in progress else "unseen",
+                (
+                    "unavailable"
+                    if capability.id in self._suppressed_capability_ids
+                    else progress[capability.id].status
+                    if capability.id in progress
+                    else "unseen"
+                ),
             )
             for capability in self._engine.capabilities()
         ]

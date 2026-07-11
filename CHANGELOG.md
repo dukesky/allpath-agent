@@ -82,6 +82,9 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added safe natural-language arithmetic recognition for common English and Chinese expressions in starter mode.
 - Replaced internal tool-result dictionaries with concise user-facing time, calculation, and memory responses.
 - Replaced mechanical `Demo response` echoes with a useful greeting and transparent reasoning-limit guidance.
+- Added Chinese/English response matching for starter greetings, tools, capability summaries, setup guidance, and fallbacks.
+- Added direct answers for explicit “what can you do?” capability questions.
+- Suppressed live-provider and advanced-routing lessons in starter mode and marked them unavailable until configured.
 - Added an isolated, idempotent installer E2E test that launches the installed command.
 
 ### Changed

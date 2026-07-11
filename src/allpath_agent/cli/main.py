@@ -264,6 +264,9 @@ def _build_application(
         CapabilityProgressRepository(database),
         CapabilitySuggestionRepository(database),
         CurriculumSessionRepository(database),
+        suppressed_capability_ids=(
+            {"model_routing", "live_provider"} if demo else set()
+        ),
     )
     return AgentApplication(
         loop,

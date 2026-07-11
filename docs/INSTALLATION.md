@@ -46,6 +46,8 @@ If no provider configuration exists, `allpath-agent` automatically enters local 
 
 Starter mode validates tools, natural arithmetic, time, memory, sessions, routing, approvals, budgets, interruption recovery, and capability education using a deterministic local provider. It recognizes common English and Chinese arithmetic phrasing and presents tool results in user-facing language. When a request needs general reasoning, it states that limitation instead of echoing the input or pretending to understand it.
 
+Starter responses follow the language of the user's latest message for Chinese and English. Explicit questions such as “what can you do?” or “你能做什么？” receive a direct capability summary. Capabilities that require a real model, including meaningful advanced-model routing, are marked unavailable and are not proactively taught until a live provider is configured.
+
 When the user asks about connecting a model, the starter provider answers directly with supported options and the current provider setup step. This explicit answer is independent of the one-proactive-tip-per-session curriculum limit. Real providers remain optional until the user wants them.
 
 ## Custom paths

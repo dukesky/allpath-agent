@@ -152,7 +152,7 @@ Run directly. Without a provider configuration, Allpath automatically enters det
 allpath-agent
 ```
 
-Starter mode requires no API key and exercises conversation, routing, tools, approvals, SQLite persistence, and session resume. `allpath-agent --demo` remains available when explicit demo behavior is useful.
+Starter mode requires no API key and exercises routing, natural arithmetic, time, memory, tools, approvals, SQLite persistence, and session resume. It answers transparently when a request requires real model reasoning instead of pretending the local rule engine understood it. `allpath-agent --demo` remains available when explicit starter behavior is useful.
 
 Create a live-provider configuration:
 

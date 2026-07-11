@@ -109,7 +109,20 @@ class DemoProvider:
             except json.JSONDecodeError:
                 payload = {"ok": False, "error": {"message": "invalid tool result"}}
             if payload.get("ok"):
-                return ChatResponse(content=f"Demo tool result: {payload.get('result')}")
+                result = payload.get("result")
+                tool_name = _tool_name_for_result(request.messages, last_message.tool_call_id)
+                if tool_name == "calculate" and isinstance(result, dict):
+                    return ChatResponse(content=f"The result is {result.get('result')}.")
+                if tool_name == "current_datetime" and isinstance(result, dict):
+                    return ChatResponse(
+                        content=(
+                            f"The current time in {result.get('timezone')} is "
+                            f"{result.get('time')}."
+                        )
+                    )
+                if tool_name == "memory_set":
+                    return ChatResponse(content="I saved that preference locally.")
+                return ChatResponse(content=f"The local tool completed: {result}")
             error = payload.get("error") or {}
             return ChatResponse(content=f"Demo tool was not completed: {error.get('message', 'unknown error')}")
 
@@ -120,9 +133,10 @@ class DemoProvider:
                 tool_calls=(self._tool_call("current_datetime", {"timezone": "UTC"}),),
                 finish_reason="tool_calls",
             )
-        if lowered.startswith("calculate "):
+        expression = _extract_arithmetic_expression(content)
+        if expression:
             return ChatResponse(
-                tool_calls=(self._tool_call("calculate", {"expression": content[10:].strip()}),),
+                tool_calls=(self._tool_call("calculate", {"expression": expression}),),
                 finish_reason="tool_calls",
             )
         if "remember" in lowered or "记住" in content:
@@ -154,11 +168,69 @@ class DemoProvider:
                     "local session will remain available."
                 )
             )
-        return ChatResponse(content=f"Demo response: {content}")
+        if lowered.strip() in {"hello", "hi", "hey", "你好", "嗨"}:
+            return ChatResponse(
+                content=(
+                    "Hello! I'm running locally. You can try arithmetic, time, "
+                    "memory, sessions, or ask how to connect a model."
+                )
+            )
+        return ChatResponse(
+            content=(
+                "I'm running in local starter mode without a reasoning model, so I "
+                "couldn't interpret that yet. I can currently handle arithmetic, "
+                "current time, memory, sessions, and model connection guidance."
+            )
+        )
 
     def _tool_call(self, name: str, arguments: dict[str, Any]) -> ToolCall:
         self._tool_call_number += 1
         return ToolCall(f"demo-call-{self._tool_call_number}", name, arguments)
+
+
+def _extract_arithmetic_expression(content: str) -> str | None:
+    candidate = content.strip()
+    candidate = re.sub(
+        r"^(?:what\s+is|what's|calculate|compute|please\s+calculate|"
+        r"帮我算(?:一下)?|计算|算一下)\s*",
+        "",
+        candidate,
+        flags=re.IGNORECASE,
+    )
+    candidate = re.sub(r"(?:等于多少|是多少|的结果是什么)\s*[?？]?$", "", candidate)
+    candidate = candidate.strip().rstrip("?？")
+    candidate = candidate.replace("×", "*").replace("÷", "/")
+    candidate = candidate.replace("（", "(").replace("）", ")")
+    word_operators = {
+        r"\s+plus\s+": "+",
+        r"\s+minus\s+": "-",
+        r"\s+(?:times|multiplied\s+by)\s+": "*",
+        r"\s+divided\s+by\s+": "/",
+    }
+    for pattern, operator_symbol in word_operators.items():
+        candidate = re.sub(
+            pattern,
+            operator_symbol,
+            candidate,
+            flags=re.IGNORECASE,
+        )
+    candidate = re.sub(r"(?<=\d)\s*[xX]\s*(?=\d)", "*", candidate)
+    if not re.fullmatch(r"[0-9+\-*/%.()\s]+", candidate):
+        return None
+    if not re.search(r"[+\-*/%]", candidate) or not re.search(r"\d", candidate):
+        return None
+    return candidate.strip()
+
+
+def _tool_name_for_result(
+    messages: tuple[ChatMessage, ...],
+    tool_call_id: str | None,
+) -> str | None:
+    for message in reversed(messages[:-1]):
+        for tool_call in message.tool_calls:
+            if tool_call.id == tool_call_id:
+                return tool_call.name
+    return None
 
 
 def _serialize_message(message: ChatMessage) -> dict[str, Any]:

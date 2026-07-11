@@ -79,6 +79,9 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Made fresh `allpath-agent` launches enter local starter mode instead of failing on a missing configuration.
 - Added conversational provider-setup intent detection without forcing a first-run setup wizard.
 - Added direct starter-mode provider guidance so explicit setup questions are never blocked by proactive-tip limits.
+- Added safe natural-language arithmetic recognition for common English and Chinese expressions in starter mode.
+- Replaced internal tool-result dictionaries with concise user-facing time, calculation, and memory responses.
+- Replaced mechanical `Demo response` echoes with a useful greeting and transparent reasoning-limit guidance.
 - Added an isolated, idempotent installer E2E test that launches the installed command.
 
 ### Changed

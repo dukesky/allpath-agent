@@ -51,7 +51,7 @@ class CliEndToEndTestCase(unittest.TestCase):
             home = Path(directory)
             first = run_cli(home, "hello\n/exit\n", "--demo")
             self.assertEqual(first.returncode, 0, first.stderr)
-            self.assertIn("Agent [fast]> Demo response: hello", first.stdout)
+            self.assertIn("Agent [fast]> Hello! I'm running locally.", first.stdout)
             session_match = re.search(r"Session: ([0-9a-f-]+)", first.stdout)
             self.assertIsNotNone(session_match)
             session_id = session_match.group(1)
@@ -89,7 +89,7 @@ class CliEndToEndTestCase(unittest.TestCase):
             progress = CapabilityProgressRepository(Database(home / "state.db"))
             current_time_status = progress.get("current_time").status
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Demo tool result", result.stdout)
+        self.assertIn("The current time in UTC", result.stdout)
         self.assertIn("UTC", result.stdout)
         self.assertEqual(current_time_status, "succeeded")
 
@@ -140,6 +140,23 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertIn("I can help you connect a real model", result.stdout)
         self.assertIn("allpath-agent init", result.stdout)
 
+    def test_starter_understands_natural_arithmetic(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = run_cli(
+                Path(directory),
+                "what is 4+3\n4×(2+1)等于多少\n/exit\n",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("The result is 7.", result.stdout)
+        self.assertIn("The result is 12.", result.stdout)
+
+    def test_starter_explains_reasoning_limit_instead_of_echoing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = run_cli(Path(directory), "??\n/exit\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("without a reasoning model", result.stdout)
+        self.assertNotIn("Demo response", result.stdout)
+
     def test_first_launch_enters_local_starter_mode_without_config(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
@@ -149,7 +166,7 @@ class CliEndToEndTestCase(unittest.TestCase):
 
         self.assertEqual(first_launch.returncode, 0, first_launch.stderr)
         self.assertIn("local starter mode", first_launch.stdout)
-        self.assertIn("Demo response: hello", first_launch.stdout)
+        self.assertIn("Hello! I'm running locally.", first_launch.stdout)
         self.assertEqual(initialized.returncode, 0, initialized.stderr)
         self.assertEqual(repeated.returncode, 2)
         self.assertIn("already exists", repeated.stderr)

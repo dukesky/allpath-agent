@@ -62,7 +62,7 @@ class InstallerEndToEndTestCase(unittest.TestCase):
         self.assertEqual(installed.returncode, 0, installed.stderr)
         self.assertIn("Installed command", first.stdout)
         self.assertIn("local starter mode", installed.stdout)
-        self.assertIn("Demo response: hello", installed.stdout)
+        self.assertIn("Hello! I'm running locally.", installed.stdout)
 
 
 if __name__ == "__main__":

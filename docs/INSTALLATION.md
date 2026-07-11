@@ -44,7 +44,7 @@ The installer is idempotent. Running it again preserves sessions and local data 
 
 If no provider configuration exists, `allpath-agent` automatically enters local starter mode. It does not stop at a setup wizard and does not require an API key.
 
-Starter mode validates tools, memory, sessions, routing, approvals, budgets, interruption recovery, and capability education using a deterministic local provider. It is not a substitute for real model reasoning.
+Starter mode validates tools, natural arithmetic, time, memory, sessions, routing, approvals, budgets, interruption recovery, and capability education using a deterministic local provider. It recognizes common English and Chinese arithmetic phrasing and presents tool results in user-facing language. When a request needs general reasoning, it states that limitation instead of echoing the input or pretending to understand it.
 
 When the user asks about connecting a model, the starter provider answers directly with supported options and the current provider setup step. This explicit answer is independent of the one-proactive-tip-per-session curriculum limit. Real providers remain optional until the user wants them.
 

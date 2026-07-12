@@ -8,15 +8,20 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from allpath_agent.cli.main import _chat
+from allpath_agent.cli.main import _chat, _run_connection_selectors
 from allpath_agent.config import load_config
 from allpath_agent.storage import (
     CapabilityProgressRepository,
     Database,
     MemoryRepository,
     MessageRepository,
+    SessionRepository,
+    WorkflowRunRepository,
 )
+from allpath_agent.secrets import SecretStore
+from allpath_agent.workflows import ProviderConnectionWorkflow
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -261,6 +266,71 @@ class CliInterruptTestCase(unittest.TestCase):
 
         self.assertEqual(result, 130)
         self.assertIn("Interrupted. Session state is saved.", outputs)
+
+    def test_invalid_terminal_character_does_not_crash_session(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            database = Database(home / "state.db")
+            database.initialize()
+            outputs: list[str] = []
+            calls = iter((UnicodeDecodeError("utf-8", b"\xbd", 0, 1, "invalid"), "/exit"))
+
+            def recovering_input(prompt: str) -> str:
+                value = next(calls)
+                if isinstance(value, Exception):
+                    raise value
+                return value
+
+            result = _chat(
+                home,
+                database,
+                True,
+                None,
+                recovering_input,
+                outputs.append,
+                outputs.append,
+            )
+
+        self.assertEqual(result, 0)
+        self.assertTrue(any("Please type it again" in message for message in outputs))
+
+    def test_failed_codex_verification_does_not_repeat_selector(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            database = Database(home / "state.db")
+            database.initialize()
+            session = SessionRepository(database).create()
+            workflow = ProviderConnectionWorkflow(
+                home / "config.toml",
+                WorkflowRunRepository(database),
+                SecretStore(home / "secrets.json"),
+                verifier=lambda provider, profile, secret: (_ for _ in ()).throw(
+                    RuntimeError("provider rejected request")
+                ),
+            )
+            initial = workflow.handle(session.id, "connect model")
+            selections = iter((1, 0))
+            selection_count = 0
+
+            def selector(title, items, searchable):
+                nonlocal selection_count
+                selection_count += 1
+                return next(selections)
+
+            with patch(
+                "allpath_agent.cli.main.ensure_codex_login",
+                return_value=(True, "signed in", "codex"),
+            ):
+                result = _run_connection_selectors(
+                    workflow,
+                    session.id,
+                    initial,
+                    selector,
+                    lambda message: None,
+                )
+
+        self.assertEqual(selection_count, 2)
+        self.assertIn("verification failed", result.messages[0].lower())
 
 
 if __name__ == "__main__":

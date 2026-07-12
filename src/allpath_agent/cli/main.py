@@ -156,6 +156,9 @@ def _chat(
             output("")
             output("Interrupted. Session state is saved.")
             return 130
+        except UnicodeDecodeError:
+            error_output("Input contained an incomplete character. Please type it again.")
+            continue
 
         if not user_message and not connection_workflow.active(active_session_id):
             continue
@@ -294,10 +297,11 @@ def _run_connection_selectors(
         elif step == "choose_model":
             provider_id = workflow.selected_provider(session_id)
             if provider_id == "openai-codex":
-                connected, message = ensure_codex_login()
+                connected, message, command = ensure_codex_login()
                 output(f"Agent [setup]> {message}")
                 if not connected:
                     return workflow.handle(session_id, "cancel")
+                workflow.set_external_command(session_id, command)
             models = workflow.model_options(session_id)
             if not models:
                 return result
@@ -309,6 +313,8 @@ def _run_connection_selectors(
             return result
         for message in result.messages:
             output(f"Agent [setup]> {message}")
+        if step == "choose_model":
+            return result
     return result
 
 

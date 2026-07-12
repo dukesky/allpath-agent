@@ -299,6 +299,22 @@ class CodexCliProviderTestCase(unittest.TestCase):
         self.assertIn("gpt-5.4", captured["arguments"])
         self.assertEqual(response.content, "OK")
 
+    def test_surfaces_jsonl_failure_instead_of_missing_message(self) -> None:
+        provider = CodexCliProvider(
+            "codex",
+            runner=lambda arguments, timeout: CommandResult(
+                0,
+                '{"type":"error","message":"model unavailable"}\n'
+                '{"type":"turn.failed","error":{"message":"upgrade required"}}\n',
+                "",
+            ),
+        )
+
+        with self.assertRaisesRegex(ProviderError, "upgrade required"):
+            provider.complete(
+                ChatRequest("future-model", (ChatMessage("user", "hello"),))
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

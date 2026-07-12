@@ -35,6 +35,11 @@ Allpath never copies or stores Codex OAuth tokens. Codex model choices are read
 from the official CLI's account-aware model cache and ordered by its priority
 metadata. A curated list is used only when that cache is unavailable.
 
+On macOS, Allpath compares the Codex executable on `PATH` with the executable
+bundled in ChatGPT.app and uses the newer version. Provider failures such as an
+outdated CLI, unavailable model, or account limit are shown directly and do not
+trigger an automatic verification loop.
+
 ## Secret boundary
 
 API keys are never submitted as ordinary chat messages. They are excluded from:

@@ -46,15 +46,38 @@ class CodexCliProvider:
 
 def _last_agent_message(result: CommandResult) -> str:
     messages: list[str] = []
+    errors: list[str] = []
     for line in result.stdout.splitlines():
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
-        item = event.get("item") if isinstance(event, dict) else None
+        if not isinstance(event, dict):
+            continue
+        event_type = event.get("type")
+        if event_type == "error" and isinstance(event.get("message"), str):
+            errors.append(event["message"])
+        failure = event.get("error")
+        if event_type == "turn.failed" and isinstance(failure, dict):
+            message = failure.get("message")
+            if isinstance(message, str):
+                errors.append(message)
+        nested = event.get("msg")
+        if isinstance(nested, dict):
+            nested_type = nested.get("type")
+            nested_message = nested.get("message")
+            if nested_type in {"error", "stream_error"} and isinstance(nested_message, str):
+                errors.append(nested_message)
+            if nested_type == "agent_message" and isinstance(nested_message, str):
+                messages.append(nested_message)
+        item = event.get("item")
         if not isinstance(item, dict) or item.get("type") != "agent_message":
             continue
         text = item.get("text")
         if isinstance(text, str) and text:
             messages.append(text)
-    return messages[-1] if messages else ""
+    if messages:
+        return messages[-1]
+    if errors:
+        raise ProviderError(f"Codex request failed: {errors[-1][:500]}")
+    return ""

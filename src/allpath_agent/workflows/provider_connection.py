@@ -135,6 +135,14 @@ class ProviderConnectionWorkflow:
         provider_id = self.selected_provider(session_id)
         return available_models(provider_id) if provider_id else ()
 
+    def set_external_command(self, session_id: str, command: str) -> None:
+        active = self._runs.get_active(session_id, WORKFLOW_ID)
+        if active is None or not command:
+            return
+        state = dict(active["state"])
+        state["external_command"] = command
+        self._runs.update(active["id"], active["current_step"], state)
+
     def input_hint(self, session_id: str) -> str | None:
         active = self._runs.get_active(session_id, WORKFLOW_ID)
         if active is None:
@@ -254,7 +262,7 @@ class ProviderConnectionWorkflow:
     ) -> ConnectionFlowResult:
         choice = _choice_by_id(state["provider"])
         language = state.get("language", "en")
-        provider = _provider_config(choice)
+        provider = _provider_config(choice, state.get("external_command", ""))
         profile = _model_profile(choice, state["model"])
         try:
             self._verifier(provider, profile, secret)
@@ -312,14 +320,14 @@ def verify_provider_connection(
         raise ValueError("provider verification returned no text")
 
 
-def _provider_config(choice: ProviderChoice) -> ProviderConfig:
+def _provider_config(choice: ProviderChoice, external_command: str = "") -> ProviderConfig:
     return ProviderConfig(
         id=choice.id,
         protocol=choice.protocol,
         auth=choice.auth,
         base_url=choice.base_url,
         api_key_env=choice.api_key_env,
-        external_command=choice.external_command,
+        external_command=external_command or choice.external_command,
         timeout_seconds=choice.timeout_seconds,
     )
 

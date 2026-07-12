@@ -103,9 +103,9 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
 
     def test_input_hint_tracks_current_workflow_step(self) -> None:
         self.workflow.handle(self.session.id, "连接模型")
-        self.assertIn("1–6", self.workflow.input_hint(self.session.id))
+        self.assertIn("1–8", self.workflow.input_hint(self.session.id))
 
-        self.workflow.handle(self.session.id, "6")
+        self.workflow.handle(self.session.id, "8")
         self.assertIn("sonnet", self.workflow.input_hint(self.session.id))
 
     def test_cancel_marks_resumable_run_terminal(self) -> None:
@@ -114,6 +114,52 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
 
         self.assertIn("cancelled", cancelled.messages[0])
         self.assertFalse(self.workflow.active(self.session.id))
+
+    def test_gemini_api_flow_uses_gemini_protocol_and_secret_boundary(self) -> None:
+        captured = {}
+
+        def verify(provider, profile, secret):
+            captured.update(provider=provider, profile=profile, secret=secret)
+
+        workflow = ProviderConnectionWorkflow(
+            self.home / "config.toml",
+            self.runs,
+            self.secrets,
+            verifier=verify,
+        )
+        workflow.handle(self.session.id, "connect model")
+        workflow.handle(self.session.id, "5")
+        request = workflow.handle(self.session.id, "gemini-3.5-flash")
+        completed = workflow.submit_secret(self.session.id, "gemini-secret")
+
+        self.assertTrue(request.request_secret)
+        self.assertTrue(completed.completed)
+        self.assertEqual(captured["provider"].protocol.value, "gemini_generate_content")
+        self.assertEqual(captured["provider"].api_key_env, "GEMINI_API_KEY")
+        self.assertFalse(captured["profile"].supports_tools)
+        self.assertEqual(self.secrets.values()["GEMINI_API_KEY"], "gemini-secret")
+
+    def test_grok_api_flow_uses_xai_endpoint(self) -> None:
+        captured = {}
+
+        def verify(provider, profile, secret):
+            captured.update(provider=provider, profile=profile, secret=secret)
+
+        workflow = ProviderConnectionWorkflow(
+            self.home / "config.toml",
+            self.runs,
+            self.secrets,
+            verifier=verify,
+        )
+        workflow.handle(self.session.id, "connect model")
+        workflow.handle(self.session.id, "4")
+        workflow.handle(self.session.id, "grok-4")
+        completed = workflow.submit_secret(self.session.id, "xai-secret")
+
+        self.assertTrue(completed.completed)
+        self.assertEqual(captured["provider"].base_url, "https://api.x.ai/v1")
+        self.assertEqual(captured["provider"].api_key_env, "XAI_API_KEY")
+        self.assertEqual(self.secrets.values()["XAI_API_KEY"], "xai-secret")
 
 
 if __name__ == "__main__":

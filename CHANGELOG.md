@@ -93,6 +93,9 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Prefer the newest installed official Codex executable, including the ChatGPT app bundle on macOS.
 - Surface Codex JSONL provider failures accurately and stop repeated verification loops.
 - Recover from incomplete multibyte terminal input instead of crashing the chat session.
+- Added xAI Grok API support through the official OpenAI-compatible endpoint.
+- Added native Google Gemini `generateContent` API support.
+- Documented why Gemini/Grok personal app OAuth is unavailable to third-party agents.
 - Added hidden API-key input and a mode-`0600` local secret store excluded from messages, workflow state, logs, and config.
 - Added real provider verification before atomic configuration replacement and same-session live-mode switching.
 - Preserved existing configuration and discarded new secrets when verification fails.

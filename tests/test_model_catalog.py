@@ -33,6 +33,8 @@ class ModelCatalogTestCase(unittest.TestCase):
 
     def test_provider_without_live_catalog_uses_curated_fallback(self) -> None:
         self.assertIn("sonnet", available_models("claude-code"))
+        self.assertTrue(available_models("xai")[0].startswith("grok-"))
+        self.assertTrue(available_models("gemini")[0].startswith("gemini-"))
 
 
 if __name__ == "__main__":

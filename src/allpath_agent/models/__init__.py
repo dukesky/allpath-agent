@@ -7,6 +7,7 @@ from .catalog import (
     builtin_provider_catalog,
 )
 from .external_cli import ClaudeCodeProvider, CommandResult
+from .gemini import GeminiGenerateContentProvider
 from .messages import ChatMessage, ChatRequest, ChatResponse, ToolCall
 from .model_catalog import available_models
 from .pool import ProviderPool
@@ -38,6 +39,7 @@ __all__ = [
     "AuthType",
     "AnthropicMessagesProvider",
     "FakeProvider",
+    "GeminiGenerateContentProvider",
     "ModelProfile",
     "ModelRouter",
     "OpenAICompatibleProvider",

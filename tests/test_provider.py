@@ -14,6 +14,7 @@ from allpath_agent.models import (
     CodexCliProvider,
     CommandResult,
     FakeProvider,
+    GeminiGenerateContentProvider,
     OpenAICompatibleProvider,
     ProviderAuthenticationError,
     ProviderError,
@@ -208,6 +209,57 @@ class ProviderPoolTestCase(unittest.TestCase):
         pool.complete("openai", request)
         self.assertEqual(openai.requests, [request])
         self.assertEqual(anthropic.requests, [])
+
+
+class GeminiGenerateContentProviderTestCase(unittest.TestCase):
+    def test_converts_messages_and_parses_candidate_text(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def transport(url, headers, payload, timeout):
+            captured.update(url=url, headers=headers, payload=payload, timeout=timeout)
+            return {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Gemini response"}]},
+                        "finishReason": "STOP",
+                    }
+                ],
+                "usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 3},
+            }
+
+        provider = GeminiGenerateContentProvider(
+            "https://generativelanguage.googleapis.com/v1beta",
+            "secret-key",
+            transport=transport,
+        )
+        response = provider.complete(
+            ChatRequest(
+                "gemini-test",
+                (
+                    ChatMessage("system", "Be concise"),
+                    ChatMessage("user", "Hello"),
+                    ChatMessage("assistant", "Hi"),
+                    ChatMessage("user", "Continue"),
+                ),
+            )
+        )
+
+        self.assertIn("models/gemini-test:generateContent?key=secret-key", captured["url"])
+        self.assertEqual(captured["payload"]["systemInstruction"]["parts"][0]["text"], "Be concise")
+        self.assertEqual([item["role"] for item in captured["payload"]["contents"]], ["user", "model", "user"])
+        self.assertEqual(response.content, "Gemini response")
+        self.assertEqual(response.usage["promptTokenCount"], 5)
+
+    def test_rejects_tool_schemas_until_conversion_is_supported(self) -> None:
+        provider = GeminiGenerateContentProvider("https://example.test", "key")
+        with self.assertRaisesRegex(ProviderError, "tools are not enabled"):
+            provider.complete(
+                ChatRequest(
+                    "gemini-test",
+                    (ChatMessage("user", "hello"),),
+                    tools=({"type": "function", "function": {"name": "tool"}},),
+                )
+            )
 
 
 class ClaudeCodeProviderTestCase(unittest.TestCase):

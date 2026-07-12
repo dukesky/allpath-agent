@@ -9,6 +9,8 @@ FALLBACK_MODELS: dict[str, tuple[str, ...]] = {
     "openai": ("gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"),
     "openai-codex": ("gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"),
     "anthropic": ("claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"),
+    "xai": ("grok-4.20", "grok-4.1-fast", "grok-4"),
+    "gemini": ("gemini-3.5-pro", "gemini-3.5-flash", "gemini-3-flash"),
     "openrouter": ("openai/gpt-5.4", "anthropic/claude-sonnet-4.6"),
     "ollama": ("llama3.2",),
     "claude-code": ("sonnet", "opus", "haiku"),

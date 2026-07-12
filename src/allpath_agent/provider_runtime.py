@@ -11,6 +11,7 @@ from allpath_agent.models import (
     AuthType,
     ClaudeCodeProvider,
     CodexCliProvider,
+    GeminiGenerateContentProvider,
     OpenAICompatibleProvider,
     ProviderPool,
     ProviderProtocol,
@@ -54,6 +55,12 @@ def build_provider_pool(
                 provider_config.base_url,
                 credential,
                 max_output_tokens=provider_config.max_output_tokens,
+                timeout_seconds=provider_config.timeout_seconds,
+            )
+        elif provider_config.protocol == ProviderProtocol.GEMINI_GENERATE_CONTENT:
+            providers[provider_id] = GeminiGenerateContentProvider(
+                provider_config.base_url,
+                credential,
                 timeout_seconds=provider_config.timeout_seconds,
             )
         elif provider_config.protocol == ProviderProtocol.EXTERNAL_CLI:

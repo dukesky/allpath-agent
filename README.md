@@ -61,6 +61,12 @@ when needed, and invokes `codex exec` without copying account tokens. Codex mode
 choices come from the account-aware local Codex model cache with curated offline
 fallbacks.
 
+Allpath also supports the official xAI Grok API and Google Gemini API through
+hidden API-key setup. Personal Grok and Gemini web-app OAuth is intentionally
+not offered: xAI does not publish a stable third-party Grok-account OAuth
+contract, and Google explicitly directs third-party agents to Gemini API or
+Vertex AI rather than reusing Gemini CLI personal OAuth credentials.
+
 ### Narrow core, capabilities at the edges
 
 The core owns conversation state, model calls, tool execution, persistence, interruption, and workflow boundaries. Calendar, Slack, WhatsApp, and other integrations belong in connectors rather than inside the core loop.

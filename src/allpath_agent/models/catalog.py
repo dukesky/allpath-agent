@@ -7,6 +7,7 @@ from enum import StrEnum
 class ProviderProtocol(StrEnum):
     OPENAI_CHAT_COMPLETIONS = "openai_chat_completions"
     ANTHROPIC_MESSAGES = "anthropic_messages"
+    GEMINI_GENERATE_CONTENT = "gemini_generate_content"
     EXTERNAL_CLI = "external_cli"
 
 
@@ -44,6 +45,22 @@ BUILTIN_PROVIDERS: tuple[ProviderDescriptor, ...] = (
         auth_type=AuthType.API_KEY,
         default_base_url="https://api.anthropic.com",
         default_api_key_env="ANTHROPIC_API_KEY",
+    ),
+    ProviderDescriptor(
+        id="xai",
+        label="xAI Grok API",
+        protocol=ProviderProtocol.OPENAI_CHAT_COMPLETIONS,
+        auth_type=AuthType.API_KEY,
+        default_base_url="https://api.x.ai/v1",
+        default_api_key_env="XAI_API_KEY",
+    ),
+    ProviderDescriptor(
+        id="gemini",
+        label="Google Gemini API",
+        protocol=ProviderProtocol.GEMINI_GENERATE_CONTENT,
+        auth_type=AuthType.API_KEY,
+        default_base_url="https://generativelanguage.googleapis.com/v1beta",
+        default_api_key_env="GEMINI_API_KEY",
     ),
     ProviderDescriptor(
         id="openrouter",

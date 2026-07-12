@@ -65,6 +65,23 @@ CHOICES: tuple[ProviderChoice, ...] = (
         api_key_env="ANTHROPIC_API_KEY",
     ),
     ProviderChoice(
+        "xai",
+        "xAI Grok API",
+        ProviderProtocol.OPENAI_CHAT_COMPLETIONS,
+        AuthType.API_KEY,
+        base_url="https://api.x.ai/v1",
+        api_key_env="XAI_API_KEY",
+    ),
+    ProviderChoice(
+        "gemini",
+        "Google Gemini API",
+        ProviderProtocol.GEMINI_GENERATE_CONTENT,
+        AuthType.API_KEY,
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        api_key_env="GEMINI_API_KEY",
+        supports_tools=False,
+    ),
+    ProviderChoice(
         "openrouter",
         "OpenRouter",
         ProviderProtocol.OPENAI_CHAT_COMPLETIONS,
@@ -404,9 +421,11 @@ def _resolve_choice(value: str) -> ProviderChoice | None:
         "1": "openai",
         "2": "openai-codex",
         "3": "anthropic",
-        "4": "openrouter",
-        "5": "ollama",
-        "6": "claude-code",
+        "4": "xai",
+        "5": "gemini",
+        "6": "openrouter",
+        "7": "ollama",
+        "8": "claude-code",
         "codex": "openai-codex",
         "chatgpt": "openai-codex",
         "claude": "claude-code",
@@ -434,12 +453,18 @@ def _provider_prompt(language: str) -> str:
         return (
             "我们在当前对话中连接模型。请选择：\n"
             "1. OpenAI API\n2. OpenAI Codex / ChatGPT 账号\n3. Anthropic API\n"
-            "4. OpenRouter\n5. Ollama（本地）\n6. Claude Code 账号\n输入“取消”可退出。"
+            "4. xAI Grok API\n5. Google Gemini API\n6. OpenRouter\n"
+            "7. Ollama（本地）\n8. Claude Code 账号\n"
+            "Gemini/Grok 个人 App OAuth 不对第三方 Agent 开放，请使用 API。\n"
+            "输入“取消”可退出。"
         )
     return (
         "Let's connect a model in this conversation. Choose:\n"
         "1. OpenAI API\n2. OpenAI Codex / ChatGPT account\n3. Anthropic API\n"
-        "4. OpenRouter\n5. Ollama (local)\n6. Claude Code account\nType cancel to stop."
+        "4. xAI Grok API\n5. Google Gemini API\n6. OpenRouter\n"
+        "7. Ollama (local)\n8. Claude Code account\n"
+        "Gemini/Grok personal app OAuth is not available to third-party agents; use their APIs.\n"
+        "Type cancel to stop."
     )
 
 

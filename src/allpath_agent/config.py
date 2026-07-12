@@ -210,6 +210,7 @@ def _provider_config(provider_id: str, raw: dict[str, Any]) -> ProviderConfig:
     supported_auth = {
         ProviderProtocol.OPENAI_CHAT_COMPLETIONS: {AuthType.API_KEY, AuthType.NONE},
         ProviderProtocol.ANTHROPIC_MESSAGES: {AuthType.API_KEY},
+        ProviderProtocol.GEMINI_GENERATE_CONTENT: {AuthType.API_KEY},
         ProviderProtocol.EXTERNAL_CLI: {AuthType.EXTERNAL_CLI},
     }
     if auth not in supported_auth[protocol]:

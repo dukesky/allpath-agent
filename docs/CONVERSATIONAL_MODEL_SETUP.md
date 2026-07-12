@@ -10,9 +10,11 @@ Agent [setup]> Let's connect a model in this conversation. Choose:
 1. OpenAI API
 2. OpenAI Codex / ChatGPT account
 3. Anthropic API
-4. OpenRouter
-5. Ollama (local)
-6. Claude Code account
+4. xAI Grok API
+5. Google Gemini API
+6. OpenRouter
+7. Ollama (local)
+8. Claude Code account
 ```
 
 In an interactive terminal, provider and model choices open an arrow-key picker.
@@ -26,6 +28,8 @@ running Agent application in live mode without changing the session.
 ## Authentication paths
 
 - OpenAI, Anthropic, and OpenRouter request an API key through hidden terminal input.
+- xAI Grok uses the official OpenAI-compatible xAI API with `XAI_API_KEY`.
+- Google Gemini uses the official `generateContent` API with `GEMINI_API_KEY`.
 - OpenAI Codex reuses the official Codex CLI. Allpath checks `codex login status`,
   starts `codex login` when necessary, and runs models through `codex exec`.
 - Ollama verifies its local OpenAI-compatible endpoint and requires no key.
@@ -39,6 +43,15 @@ On macOS, Allpath compares the Codex executable on `PATH` with the executable
 bundled in ChatGPT.app and uses the newer version. Provider failures such as an
 outdated CLI, unavailable model, or account limit are shown directly and do not
 trigger an automatic verification loop.
+
+## Personal account OAuth boundary
+
+Allpath does not reuse Gemini CLI personal OAuth. Google states that third-party
+software must use Gemini API or Vertex AI instead of piggybacking on Gemini CLI
+OAuth. xAI does not currently document a stable third-party OAuth contract for
+Grok web-app subscriptions. Until an official contract exists, Allpath offers
+API authentication only for Gemini and Grok and does not scrape cookies or copy
+tokens from their apps.
 
 ## Secret boundary
 

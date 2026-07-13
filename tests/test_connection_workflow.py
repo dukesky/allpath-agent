@@ -51,14 +51,17 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
             model_discoverer=lambda provider_id, base_url, secret: ("test-model",),
         )
         catalog = resumed.submit_secret(self.session.id, "secret-value")
-        completed = resumed.handle(self.session.id, "test-model")
+        profile = resumed.handle(self.session.id, "test-model")
+        completed = resumed.handle(self.session.id, "fast")
 
         self.assertTrue(started.handled)
         self.assertIn("OpenAI", started.messages[0])
         self.assertTrue(selected.request_secret)
         self.assertIn("1", catalog.messages[0])
+        self.assertIn("fast", profile.messages[0])
         self.assertTrue(completed.completed)
         config = load_config(self.home / "config.toml")
+        self.assertEqual(config.models[0].name, "fast")
         self.assertEqual(config.models[0].model, "test-model")
         self.assertEqual(self.secrets.values()["OPENAI_API_KEY"], "secret-value")
         self.assertEqual(stat.S_IMODE(self.secrets.path.stat().st_mode), 0o600)
@@ -95,7 +98,8 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
         workflow.handle(self.session.id, "3")
         request = workflow.handle(self.session.id, "3")
         workflow.submit_secret(self.session.id, "not-saved")
-        failed = workflow.handle(self.session.id, "test-model")
+        workflow.handle(self.session.id, "test-model")
+        failed = workflow.handle(self.session.id, "advanced")
 
         self.assertTrue(request.request_secret)
         self.assertTrue(failed.request_secret)
@@ -130,7 +134,8 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
             verifier=self.verify,
             model_discoverer=discover,
         )
-        request_secret = resumed.handle(self.session.id, "test-model")
+        resumed.handle(self.session.id, "test-model")
+        request_secret = resumed.handle(self.session.id, "standard")
         completed = resumed.submit_secret(self.session.id, "second-secret")
 
         self.assertTrue(request_secret.request_secret)
@@ -169,7 +174,8 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
         workflow.handle(self.session.id, "5")
         request = workflow.handle(self.session.id, "5")
         workflow.submit_secret(self.session.id, "gemini-secret")
-        completed = workflow.handle(self.session.id, "gemini-3.5-flash")
+        workflow.handle(self.session.id, "gemini-3.5-flash")
+        completed = workflow.handle(self.session.id, "fast")
 
         self.assertTrue(request.request_secret)
         self.assertTrue(completed.completed)
@@ -194,12 +200,40 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
         workflow.handle(self.session.id, "connect model")
         workflow.handle(self.session.id, "4")
         workflow.submit_secret(self.session.id, "xai-secret")
-        completed = workflow.handle(self.session.id, "grok-4")
+        workflow.handle(self.session.id, "grok-4")
+        completed = workflow.handle(self.session.id, "advanced")
 
         self.assertTrue(completed.completed)
         self.assertEqual(captured["provider"].base_url, "https://api.x.ai/v1")
         self.assertEqual(captured["provider"].api_key_env, "XAI_API_KEY")
         self.assertEqual(self.secrets.values()["XAI_API_KEY"], "xai-secret")
+
+    def test_repeated_setup_preserves_other_model_roles_and_providers(self) -> None:
+        self.workflow.handle(self.session.id, "connect model")
+        self.workflow.handle(self.session.id, "1")
+        self.workflow.submit_secret(self.session.id, "openai-secret")
+        self.workflow.handle(self.session.id, "test-model")
+        self.workflow.handle(self.session.id, "fast")
+
+        self.workflow.handle(self.session.id, "connect model")
+        self.workflow.handle(self.session.id, "3")
+        self.workflow.handle(self.session.id, "3")
+        self.workflow.submit_secret(self.session.id, "anthropic-secret")
+        self.workflow.handle(self.session.id, "test-model")
+        completed = self.workflow.handle(self.session.id, "advanced")
+
+        config = load_config(self.home / "config.toml")
+        profiles = {profile.name: profile for profile in config.models}
+
+        self.assertTrue(completed.completed)
+        self.assertEqual(set(config.providers), {"anthropic", "openai"})
+        self.assertEqual(set(profiles), {"advanced", "fast"})
+        self.assertEqual(profiles["fast"].provider, "openai")
+        self.assertEqual(profiles["advanced"].provider, "anthropic")
+        self.assertEqual(
+            set(self.secrets.values()),
+            {"ANTHROPIC_API_KEY", "OPENAI_API_KEY"},
+        )
 
 
 if __name__ == "__main__":

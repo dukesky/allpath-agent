@@ -98,6 +98,8 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Documented why Gemini/Grok personal app OAuth is unavailable to third-party agents.
 - Changed API setup to authenticate before model selection.
 - Added live credential-aware model discovery for OpenAI, Anthropic, xAI, Gemini, and OpenRouter.
+- Added conversational assignment of connected models to `fast`, `standard`, or `advanced` routing roles.
+- Preserved existing providers and model roles when adding or replacing one model connection.
 - Added curated catalog fallback and restart-safe secret re-entry without persisting credentials in workflow state.
 - Added hidden API-key input and a mode-`0600` local secret store excluded from messages, workflow state, logs, and config.
 - Added real provider verification before atomic configuration replacement and same-session live-mode switching.

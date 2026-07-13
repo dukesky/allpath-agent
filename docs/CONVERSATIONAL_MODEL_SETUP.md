@@ -1,6 +1,6 @@
 # Conversational Model Setup
 
-Allpath connects its first or replacement model inside the normal chat instead of sending the user to a separate setup wizard.
+Allpath connects and manages models inside the normal chat instead of sending the user to a separate setup wizard.
 
 Start with a natural request:
 
@@ -27,8 +27,15 @@ For API providers the workflow is credential-first:
 2. enter the API key through hidden input;
 3. load the models available to that credential;
 4. choose from the searchable model picker;
-5. verify a real response;
-6. atomically save the secret and configuration.
+5. assign the model to `fast`, `standard`, or `advanced`;
+6. verify a real response;
+7. atomically save the secret and configuration.
+
+The roles describe routing intent, not vendors. `fast` is optimized for cheap,
+simple tasks, `standard` for balanced everyday work, and `advanced` for the
+most complex tasks. Repeat “connect model” to configure another role. A
+successful setup replaces only the selected provider entry and role while
+preserving every other configured provider and model role.
 
 The running Agent application then rebuilds in live mode without changing the
 session.
@@ -83,9 +90,9 @@ Before configuration changes, Allpath sends a minimal verification prompt throug
 - the workflow remains resumable at the credential or model step;
 - the user can retry or type `cancel` / `取消`.
 
-After verification succeeds, Allpath atomically replaces `config.toml`, marks the workflow succeeded, reloads the provider pool, and continues in the same session.
+After verification succeeds, Allpath atomically updates `config.toml`, marks the workflow succeeded, reloads the provider pool, and continues in the same session. Existing providers and model roles not selected by the current workflow remain unchanged.
 
-Workflow state is persisted in SQLite, so provider and model selection survive a process restart. Secret input is intentionally requested again after a restart because secrets are never placed in workflow state.
+Workflow state is persisted in SQLite, so provider, model, and role selection survive a process restart. Secret input is intentionally requested again after a restart because secrets are never placed in workflow state.
 
 Discovered model IDs may be persisted in workflow state, but API keys never are.
 If the process restarts after discovery but before verification, Allpath reuses

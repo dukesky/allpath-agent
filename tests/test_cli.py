@@ -165,7 +165,7 @@ class CliEndToEndTestCase(unittest.TestCase):
             try:
                 result = run_cli(
                     home,
-                    "connect a model\n8\n\n/exit\n",
+                    "connect a model\n8\n\n1\n/exit\n",
                 )
             finally:
                 os.environ["PATH"] = previous_path
@@ -175,6 +175,7 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Claude Code account is connected and verified", result.stdout)
         self.assertEqual(config.models[0].provider, "claude-code")
+        self.assertEqual(config.models[0].name, "fast")
         self.assertEqual(config.models[0].model, "sonnet")
         self.assertFalse(config.models[0].supports_tools)
 
@@ -309,7 +310,7 @@ class CliInterruptTestCase(unittest.TestCase):
                 ),
             )
             initial = workflow.handle(session.id, "connect model")
-            selections = iter((1, 0))
+            selections = iter((1, 0, 0))
             selection_count = 0
 
             def selector(title, items, searchable):
@@ -329,7 +330,7 @@ class CliInterruptTestCase(unittest.TestCase):
                     lambda message: None,
                 )
 
-        self.assertEqual(selection_count, 2)
+        self.assertEqual(selection_count, 3)
         self.assertIn("verification failed", result.messages[0].lower())
 
 

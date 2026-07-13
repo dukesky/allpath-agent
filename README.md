@@ -69,6 +69,12 @@ filters its catalog to `generateContent` models. Network/catalog failures fall
 back to a curated list, and the selected model is still verified before any
 configuration or secret is committed.
 
+After choosing a model, assign it to `fast`, `standard`, or `advanced`. Running
+“connect model” again adds or replaces only the selected role; other configured
+roles and providers remain available. This lets one installation use, for
+example, an inexpensive OpenAI model for `fast` tasks and an Anthropic model
+for `advanced` tasks without manually editing TOML.
+
 Allpath also supports the official xAI Grok API and Google Gemini API through
 hidden API-key setup. Personal Grok and Gemini web-app OAuth is intentionally
 not offered: xAI does not publish a stable third-party Grok-account OAuth
@@ -85,7 +91,7 @@ The first locally runnable MVP includes:
 
 - a terminal chat interface;
 - multiple model providers, including OpenAI-compatible APIs, native Anthropic, local endpoints, and Claude Code account auth;
-- configurable `fast` and `advanced` model profiles;
+- configurable `fast`, `standard`, and `advanced` model profiles;
 - a synchronous model/tool conversation loop;
 - a small stable tool registry;
 - SQLite sessions, messages, routing decisions, and capability progress;

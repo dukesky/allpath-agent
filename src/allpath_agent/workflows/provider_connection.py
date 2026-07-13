@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from allpath_agent.config import AgentConfig, AppConfig, ProviderConfig
+from allpath_agent.config import AgentConfig, AppConfig, ProviderConfig, load_config
 from allpath_agent.models import (
     AuthType,
     ChatMessage,
@@ -123,6 +123,13 @@ Verifier = Callable[[ProviderConfig, ModelProfile, str], None]
 ModelDiscoverer = Callable[[str, str, str], tuple[str, ...]]
 
 
+PROFILE_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("fast", "Fast — cheapest eligible model for simple tasks"),
+    ("standard", "Standard — balanced everyday model"),
+    ("advanced", "Advanced — highest-quality model for complex tasks"),
+)
+
+
 class ProviderConnectionWorkflow:
     def __init__(
         self,
@@ -152,6 +159,9 @@ class ProviderConnectionWorkflow:
 
     def provider_options(self) -> tuple[str, ...]:
         return tuple(choice.label for choice in CHOICES)
+
+    def profile_options(self) -> tuple[str, ...]:
+        return tuple(label for _, label in PROFILE_OPTIONS)
 
     def model_options(self, session_id: str) -> tuple[str, ...]:
         active = self._runs.get_active(session_id, WORKFLOW_ID)
@@ -191,6 +201,12 @@ class ProviderConnectionWorkflow:
                     f"Enter a model ID; press Enter for {choice.default_model}",
                 )
             return _text(language, "输入模型 ID", "Enter a model ID")
+        if active["current_step"] == "choose_profile":
+            return _text(
+                language,
+                "选择 fast、standard 或 advanced",
+                "Choose fast, standard, or advanced",
+            )
         if active["current_step"] == "awaiting_secret":
             return _text(language, "API Key 将隐藏输入", "API key input will be hidden")
         return None
@@ -264,6 +280,24 @@ class ProviderConnectionWorkflow:
                     ),
                 )
             state["model"] = model
+            self._runs.update(active["id"], "choose_profile", state)
+            return ConnectionFlowResult(True, (_profile_prompt(language),))
+
+        if active["current_step"] == "choose_profile":
+            profile_name = _resolve_profile(cleaned)
+            if profile_name is None:
+                return ConnectionFlowResult(
+                    True,
+                    (
+                        _text(
+                            language,
+                            "请选择 fast、standard 或 advanced。",
+                            "Choose fast, standard, or advanced.",
+                        ),
+                    ),
+                )
+            state["profile"] = profile_name
+            choice = _choice_by_id(state["provider"])
             if choice.auth == AuthType.API_KEY and active["id"] not in self._pending_secrets:
                 self._runs.update(active["id"], "awaiting_secret", state)
                 return ConnectionFlowResult(
@@ -294,7 +328,7 @@ class ProviderConnectionWorkflow:
                 request_secret=True,
             )
         state = dict(active["state"])
-        if state.get("model"):
+        if state.get("model") and state.get("profile"):
             return self._finalize(active["id"], state, secret)
         choice = _choice_by_id(state["provider"])
         models = self._model_discoverer(choice.id, choice.base_url, secret)
@@ -321,7 +355,7 @@ class ProviderConnectionWorkflow:
         choice = _choice_by_id(state["provider"])
         language = state.get("language", "en")
         provider = _provider_config(choice, state.get("external_command", ""))
-        profile = _model_profile(choice, state["model"])
+        profile = _model_profile(choice, state["model"], state["profile"])
         try:
             self._verifier(provider, profile, secret)
         except Exception as error:
@@ -392,12 +426,17 @@ def _provider_config(choice: ProviderChoice, external_command: str = "") -> Prov
     )
 
 
-def _model_profile(choice: ProviderChoice, model: str) -> ModelProfile:
+def _model_profile(choice: ProviderChoice, model: str, profile_name: str) -> ModelProfile:
+    quality, cost = {
+        "fast": (4, 1),
+        "standard": (7, 4),
+        "advanced": (10, 8),
+    }[profile_name]
     return ModelProfile(
-        name="default",
+        name=profile_name,
         model=model,
-        quality=6,
-        cost=3,
+        quality=quality,
+        cost=cost,
         supports_tools=choice.supports_tools,
         supports_vision=False,
         max_context_tokens=128_000,
@@ -410,8 +449,36 @@ def _write_config_atomic(
     provider: ProviderConfig,
     profile: ModelProfile,
 ) -> None:
+    if path.is_file():
+        existing = load_config(path)
+        providers = dict(existing.providers)
+        models = {item.name: item for item in existing.models}
+        agent = existing.agent
+    else:
+        providers = {}
+        models = {}
+        agent = AgentConfig(
+            "You are Allpath Agent, a concise and helpful personal assistant.",
+            12,
+            6,
+        )
+    providers[provider.id] = provider
+    models[profile.name] = profile
+    lines: list[str] = []
+    for provider_id, configured in sorted(providers.items()):
+        lines.extend(_serialize_provider(provider_id, configured))
+    lines.extend(_serialize_agent(agent))
+    for profile_name, configured in sorted(models.items()):
+        lines.extend(_serialize_profile(profile_name, configured))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    temporary.write_text("\n".join(lines), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _serialize_provider(provider_id: str, provider: ProviderConfig) -> list[str]:
     lines = [
-        f"[providers.{provider.id}]",
+        f"[providers.{provider_id}]",
         f"protocol = {_toml_string(provider.protocol.value)}",
         f"auth = {_toml_string(provider.auth.value)}",
     ]
@@ -419,39 +486,43 @@ def _write_config_atomic(
         lines.append(f"base_url = {_toml_string(provider.base_url)}")
     if provider.api_key_env:
         lines.append(f"api_key_env = {_toml_string(provider.api_key_env)}")
+    if provider.protocol == ProviderProtocol.ANTHROPIC_MESSAGES:
+        lines.append(f"max_output_tokens = {provider.max_output_tokens}")
     if provider.external_command:
         lines.append(f"external_command = {_toml_string(provider.external_command)}")
-    lines.extend(
-        [
-            f"timeout_seconds = {provider.timeout_seconds}",
-            "",
-            "[agent]",
-            'system_prompt = "You are Allpath Agent, a concise and helpful personal assistant."',
-            "max_model_calls = 12",
-            "max_task_tokens = 100000",
-            "max_task_cost_usd = 0.0",
-            "provider_max_attempts = 3",
-            "retry_base_delay_seconds = 0.5",
-            "retry_max_delay_seconds = 8.0",
-            "advanced_threshold = 6",
-            "",
-            "[models.default]",
-            f"provider = {_toml_string(profile.provider)}",
-            f"model = {_toml_string(profile.model)}",
-            f"quality = {profile.quality}",
-            f"cost = {profile.cost}",
-            f"supports_tools = {str(profile.supports_tools).lower()}",
-            "supports_vision = false",
-            f"max_context_tokens = {profile.max_context_tokens}",
-            "input_cost_per_million = 0.0",
-            "output_cost_per_million = 0.0",
-            "",
-        ]
-    )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(f"{path.suffix}.tmp")
-    temporary.write_text("\n".join(lines), encoding="utf-8")
-    temporary.replace(path)
+    lines.extend([f"timeout_seconds = {provider.timeout_seconds}", ""])
+    return lines
+
+
+def _serialize_agent(agent: AgentConfig) -> list[str]:
+    return [
+        "[agent]",
+        f"system_prompt = {_toml_string(agent.system_prompt)}",
+        f"max_model_calls = {agent.max_model_calls}",
+        f"max_task_tokens = {agent.max_task_tokens}",
+        f"max_task_cost_usd = {agent.max_task_cost_usd}",
+        f"provider_max_attempts = {agent.provider_max_attempts}",
+        f"retry_base_delay_seconds = {agent.retry_base_delay_seconds}",
+        f"retry_max_delay_seconds = {agent.retry_max_delay_seconds}",
+        f"advanced_threshold = {agent.advanced_threshold}",
+        "",
+    ]
+
+
+def _serialize_profile(profile_name: str, profile: ModelProfile) -> list[str]:
+    return [
+        f"[models.{profile_name}]",
+        f"provider = {_toml_string(profile.provider)}",
+        f"model = {_toml_string(profile.model)}",
+        f"quality = {profile.quality}",
+        f"cost = {profile.cost}",
+        f"supports_tools = {str(profile.supports_tools).lower()}",
+        f"supports_vision = {str(profile.supports_vision).lower()}",
+        f"max_context_tokens = {profile.max_context_tokens}",
+        f"input_cost_per_million = {profile.input_cost_per_million}",
+        f"output_cost_per_million = {profile.output_cost_per_million}",
+        "",
+    ]
 
 
 def _toml_string(value: str) -> str:
@@ -482,6 +553,13 @@ def _resolve_choice(value: str) -> ProviderChoice | None:
         ),
         None,
     )
+
+
+def _resolve_profile(value: str) -> str | None:
+    normalized = value.strip().lower()
+    aliases = {"1": "fast", "2": "standard", "3": "advanced"}
+    candidate = aliases.get(normalized, normalized)
+    return candidate if candidate in {name for name, _ in PROFILE_OPTIONS} else None
 
 
 def _choice_by_id(provider_id: str) -> ProviderChoice:
@@ -518,6 +596,17 @@ def _model_prompt(choice: ProviderChoice, language: str) -> str:
         language,
         f"请输入 {choice.label} 的模型 ID{default}。",
         f"Enter the model ID for {choice.label}{default_en}.",
+    )
+
+
+def _profile_prompt(language: str) -> str:
+    return _text(
+        language,
+        "这个模型用于哪类任务？请选择：\n1. fast（便宜、简单任务）\n"
+        "2. standard（日常平衡）\n3. advanced（复杂任务、最高质量）",
+        "Which task role should use this model? Choose:\n"
+        "1. fast (cheap, simple tasks)\n2. standard (balanced everyday tasks)\n"
+        "3. advanced (complex, highest-quality tasks)",
     )
 
 

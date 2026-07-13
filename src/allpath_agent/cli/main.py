@@ -317,11 +317,16 @@ def _run_connection_selectors(
             if selected is None:
                 return result
             result = workflow.handle(session_id, models[selected])
+        elif step == "choose_profile":
+            selected = selector("Assign model role", workflow.profile_options(), False)
+            if selected is None:
+                return result
+            result = workflow.handle(session_id, str(selected + 1))
         else:
             return result
         for message in result.messages:
             output(f"Agent [setup]> {message}")
-        if step == "choose_model":
+        if step == "choose_profile":
             return result
     return result
 

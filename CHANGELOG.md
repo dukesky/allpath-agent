@@ -96,6 +96,9 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added xAI Grok API support through the official OpenAI-compatible endpoint.
 - Added native Google Gemini `generateContent` API support.
 - Documented why Gemini/Grok personal app OAuth is unavailable to third-party agents.
+- Changed API setup to authenticate before model selection.
+- Added live credential-aware model discovery for OpenAI, Anthropic, xAI, Gemini, and OpenRouter.
+- Added curated catalog fallback and restart-safe secret re-entry without persisting credentials in workflow state.
 - Added hidden API-key input and a mode-`0600` local secret store excluded from messages, workflow state, logs, and config.
 - Added real provider verification before atomic configuration replacement and same-session live-mode switching.
 - Preserved existing configuration and discarded new secrets when verification fails.

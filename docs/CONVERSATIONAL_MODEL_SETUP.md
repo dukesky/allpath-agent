@@ -21,9 +21,17 @@ In an interactive terminal, provider and model choices open an arrow-key picker.
 Use `↑`/`↓`, Enter to select, Esc to cancel, and `/` to search the model list.
 Non-interactive terminals retain the numbered/text fallback.
 
-The workflow requests a credential only when the selected provider needs one,
-verifies a real response, writes configuration atomically, and rebuilds the
-running Agent application in live mode without changing the session.
+For API providers the workflow is credential-first:
+
+1. choose a provider;
+2. enter the API key through hidden input;
+3. load the models available to that credential;
+4. choose from the searchable model picker;
+5. verify a real response;
+6. atomically save the secret and configuration.
+
+The running Agent application then rebuilds in live mode without changing the
+session.
 
 ## Authentication paths
 
@@ -78,3 +86,9 @@ Before configuration changes, Allpath sends a minimal verification prompt throug
 After verification succeeds, Allpath atomically replaces `config.toml`, marks the workflow succeeded, reloads the provider pool, and continues in the same session.
 
 Workflow state is persisted in SQLite, so provider and model selection survive a process restart. Secret input is intentionally requested again after a restart because secrets are never placed in workflow state.
+
+Discovered model IDs may be persisted in workflow state, but API keys never are.
+If the process restarts after discovery but before verification, Allpath reuses
+the safe model list and asks for the key again. If live catalog discovery is
+unavailable, it shows a curated fallback list and still verifies the selected
+model before saving anything.

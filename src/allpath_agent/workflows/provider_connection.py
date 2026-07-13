@@ -14,6 +14,7 @@ from allpath_agent.models import (
     ModelProfile,
     ProviderProtocol,
     available_models,
+    discover_provider_models,
 )
 from allpath_agent.provider_runtime import build_provider_pool
 from allpath_agent.secrets import SecretStore
@@ -119,6 +120,7 @@ class ConnectionFlowResult:
 
 
 Verifier = Callable[[ProviderConfig, ModelProfile, str], None]
+ModelDiscoverer = Callable[[str, str, str], tuple[str, ...]]
 
 
 class ProviderConnectionWorkflow:
@@ -128,11 +130,14 @@ class ProviderConnectionWorkflow:
         runs: WorkflowRunRepository,
         secrets: SecretStore,
         verifier: Verifier | None = None,
+        model_discoverer: ModelDiscoverer | None = None,
     ):
         self._config_path = Path(config_path)
         self._runs = runs
         self._secrets = secrets
         self._verifier = verifier or verify_provider_connection
+        self._model_discoverer = model_discoverer or discover_provider_models
+        self._pending_secrets: dict[str, str] = {}
 
     def active(self, session_id: str) -> bool:
         return self._runs.get_active(session_id, WORKFLOW_ID) is not None
@@ -149,7 +154,13 @@ class ProviderConnectionWorkflow:
         return tuple(choice.label for choice in CHOICES)
 
     def model_options(self, session_id: str) -> tuple[str, ...]:
-        provider_id = self.selected_provider(session_id)
+        active = self._runs.get_active(session_id, WORKFLOW_ID)
+        if active is None:
+            return ()
+        options = active["state"].get("model_options")
+        if isinstance(options, list) and all(isinstance(item, str) for item in options):
+            return tuple(options)
+        provider_id = active["state"].get("provider")
         return available_models(provider_id) if provider_id else ()
 
     def set_external_command(self, session_id: str, command: str) -> None:
@@ -222,6 +233,13 @@ class ProviderConnectionWorkflow:
                     ),
                 )
             state["provider"] = choice.id
+            if choice.auth == AuthType.API_KEY:
+                self._runs.update(active["id"], "awaiting_secret", state)
+                return ConnectionFlowResult(
+                    True,
+                    (_secret_prompt(language, discover_models=True),),
+                    request_secret=True,
+                )
             self._runs.update(active["id"], "choose_model", state)
             return ConnectionFlowResult(True, (_model_prompt(choice, language),))
 
@@ -233,22 +251,28 @@ class ProviderConnectionWorkflow:
                     True,
                     (_text(language, "请输入 Provider 的模型 ID。", "Enter the provider model ID."),),
                 )
-            state["model"] = model
-            if choice.auth == AuthType.API_KEY:
-                self._runs.update(active["id"], "awaiting_secret", state)
+            options = state.get("model_options")
+            if isinstance(options, list) and model not in options:
                 return ConnectionFlowResult(
                     True,
                     (
                         _text(
                             language,
-                            "下一步请输入 API Key；输入内容不会显示或写入对话记录。",
-                            "Next, enter the API key. It will be hidden and excluded "
-                            "from conversation history.",
+                            "请选择列表中的模型，或重新连接以刷新目录。",
+                            "Choose a model from the list, or reconnect to refresh the catalog.",
                         ),
                     ),
+                )
+            state["model"] = model
+            if choice.auth == AuthType.API_KEY and active["id"] not in self._pending_secrets:
+                self._runs.update(active["id"], "awaiting_secret", state)
+                return ConnectionFlowResult(
+                    True,
+                    (_secret_prompt(language, discover_models=False),),
                     request_secret=True,
                 )
-            return self._finalize(active["id"], state, "")
+            secret = self._pending_secrets.pop(active["id"], "")
+            return self._finalize(active["id"], state, secret)
 
         if active["current_step"] == "awaiting_secret":
             return ConnectionFlowResult(
@@ -269,7 +293,24 @@ class ProviderConnectionWorkflow:
                 (_text(language, "API Key 不能为空。", "API key cannot be empty."),),
                 request_secret=True,
             )
-        return self._finalize(active["id"], dict(active["state"]), secret)
+        state = dict(active["state"])
+        if state.get("model"):
+            return self._finalize(active["id"], state, secret)
+        choice = _choice_by_id(state["provider"])
+        models = self._model_discoverer(choice.id, choice.base_url, secret)
+        state["model_options"] = list(models or available_models(choice.id))
+        self._pending_secrets[active["id"]] = secret
+        self._runs.update(active["id"], "choose_model", state)
+        return ConnectionFlowResult(
+            True,
+            (
+                _text(
+                    state.get("language", "en"),
+                    f"已加载 {len(state['model_options'])} 个可用模型，请选择。",
+                    f"Loaded {len(state['model_options'])} available models. Choose one.",
+                ),
+            ),
+        )
 
     def _finalize(
         self,
@@ -284,6 +325,7 @@ class ProviderConnectionWorkflow:
         try:
             self._verifier(provider, profile, secret)
         except Exception as error:
+            self._pending_secrets.pop(run_id, None)
             next_step = "awaiting_secret" if choice.auth == AuthType.API_KEY else "choose_model"
             self._runs.update(run_id, next_step, state)
             message = _text(
@@ -299,6 +341,7 @@ class ProviderConnectionWorkflow:
 
         if choice.auth == AuthType.API_KEY:
             self._secrets.set(choice.api_key_env, secret)
+        self._pending_secrets.pop(run_id, None)
         _write_config_atomic(self._config_path, provider, profile)
         self._runs.update(run_id, None, state, status="succeeded")
         return ConnectionFlowResult(
@@ -475,6 +518,21 @@ def _model_prompt(choice: ProviderChoice, language: str) -> str:
         language,
         f"请输入 {choice.label} 的模型 ID{default}。",
         f"Enter the model ID for {choice.label}{default_en}.",
+    )
+
+
+def _secret_prompt(language: str, *, discover_models: bool) -> str:
+    if discover_models:
+        return _text(
+            language,
+            "下一步请输入 API Key；它将用于加载可用模型，不会显示或写入对话记录。",
+            "Next, enter the API key. It will load available models and remain hidden "
+            "and excluded from conversation history.",
+        )
+    return _text(
+        language,
+        "请重新输入 API Key 以完成验证；Key 不会写入工作流状态。",
+        "Re-enter the API key to finish verification. It is not stored in workflow state.",
     )
 
 

@@ -234,6 +234,14 @@ def _chat(
                 )
                 for message in connection_result.messages:
                     output(f"Agent [setup]> {message}")
+                if selector_fn is not None and not connection_result.request_secret:
+                    connection_result = _run_connection_selectors(
+                        connection_workflow,
+                        active_session_id,
+                        connection_result,
+                        selector_fn,
+                        output,
+                    )
             if connection_result.completed:
                 application = _build_application(
                     home,

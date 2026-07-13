@@ -61,6 +61,14 @@ when needed, and invokes `codex exec` without copying account tokens. Codex mode
 choices come from the account-aware local Codex model cache with curated offline
 fallbacks.
 
+API-provider setup is credential-first: after hidden key entry, Allpath queries
+that provider's models endpoint and opens a searchable picker containing the
+models available to that credential. OpenAI-compatible providers use bearer
+authentication, Anthropic uses its native model catalog headers, and Gemini
+filters its catalog to `generateContent` models. Network/catalog failures fall
+back to a curated list, and the selected model is still verified before any
+configuration or secret is committed.
+
 Allpath also supports the official xAI Grok API and Google Gemini API through
 hidden API-key setup. Personal Grok and Gemini web-app OAuth is intentionally
 not offered: xAI does not publish a stable third-party Grok-account OAuth

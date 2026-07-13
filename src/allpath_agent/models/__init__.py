@@ -9,7 +9,7 @@ from .catalog import (
 from .external_cli import ClaudeCodeProvider, CommandResult
 from .gemini import GeminiGenerateContentProvider
 from .messages import ChatMessage, ChatRequest, ChatResponse, ToolCall
-from .model_catalog import available_models
+from .model_catalog import available_models, discover_provider_models
 from .pool import ProviderPool
 from .router import ModelProfile, ModelRouter, RoutingDecision, TaskSignals
 from .provider import (
@@ -59,4 +59,5 @@ __all__ = [
     "ToolCall",
     "builtin_provider_catalog",
     "available_models",
+    "discover_provider_models",
 ]

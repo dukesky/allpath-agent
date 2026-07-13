@@ -33,6 +33,7 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
             self.runs,
             self.secrets,
             verifier=verify,
+            model_discoverer=lambda provider_id, base_url, secret: ("test-model",),
         )
 
     def tearDown(self) -> None:
@@ -47,14 +48,15 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
             self.runs,
             self.secrets,
             verifier=self.verify,
+            model_discoverer=lambda provider_id, base_url, secret: ("test-model",),
         )
-        model = resumed.handle(self.session.id, "test-model")
-        completed = resumed.submit_secret(self.session.id, "secret-value")
+        catalog = resumed.submit_secret(self.session.id, "secret-value")
+        completed = resumed.handle(self.session.id, "test-model")
 
         self.assertTrue(started.handled)
         self.assertIn("OpenAI", started.messages[0])
-        self.assertIn("模型 ID", selected.messages[0])
-        self.assertTrue(model.request_secret)
+        self.assertTrue(selected.request_secret)
+        self.assertIn("1", catalog.messages[0])
         self.assertTrue(completed.completed)
         config = load_config(self.home / "config.toml")
         self.assertEqual(config.models[0].model, "test-model")
@@ -86,12 +88,14 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
             self.runs,
             self.secrets,
             verifier=fail_verification,
+            model_discoverer=lambda provider_id, base_url, secret: ("test-model",),
         )
         (self.home / "config.toml").write_text("existing-config", encoding="utf-8")
         workflow.handle(self.session.id, "connect a model")
         workflow.handle(self.session.id, "3")
-        request = workflow.handle(self.session.id, "test-model")
-        failed = workflow.submit_secret(self.session.id, "not-saved")
+        request = workflow.handle(self.session.id, "3")
+        workflow.submit_secret(self.session.id, "not-saved")
+        failed = workflow.handle(self.session.id, "test-model")
 
         self.assertTrue(request.request_secret)
         self.assertTrue(failed.request_secret)
@@ -100,6 +104,39 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
             "existing-config",
         )
         self.assertEqual(self.secrets.values(), {})
+
+    def test_restart_after_catalog_requires_secret_again_without_rediscovery(self) -> None:
+        discoveries = []
+
+        def discover(provider_id, base_url, secret):
+            discoveries.append(secret)
+            return ("test-model",)
+
+        workflow = ProviderConnectionWorkflow(
+            self.home / "config.toml",
+            self.runs,
+            self.secrets,
+            verifier=self.verify,
+            model_discoverer=discover,
+        )
+        workflow.handle(self.session.id, "connect model")
+        workflow.handle(self.session.id, "1")
+        workflow.submit_secret(self.session.id, "first-secret")
+
+        resumed = ProviderConnectionWorkflow(
+            self.home / "config.toml",
+            self.runs,
+            self.secrets,
+            verifier=self.verify,
+            model_discoverer=discover,
+        )
+        request_secret = resumed.handle(self.session.id, "test-model")
+        completed = resumed.submit_secret(self.session.id, "second-secret")
+
+        self.assertTrue(request_secret.request_secret)
+        self.assertTrue(completed.completed)
+        self.assertEqual(discoveries, ["first-secret"])
+        self.assertEqual(self.verifications[-1][2], "second-secret")
 
     def test_input_hint_tracks_current_workflow_step(self) -> None:
         self.workflow.handle(self.session.id, "连接模型")
@@ -126,11 +163,13 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
             self.runs,
             self.secrets,
             verifier=verify,
+            model_discoverer=lambda provider_id, base_url, secret: ("gemini-3.5-flash",),
         )
         workflow.handle(self.session.id, "connect model")
         workflow.handle(self.session.id, "5")
-        request = workflow.handle(self.session.id, "gemini-3.5-flash")
-        completed = workflow.submit_secret(self.session.id, "gemini-secret")
+        request = workflow.handle(self.session.id, "5")
+        workflow.submit_secret(self.session.id, "gemini-secret")
+        completed = workflow.handle(self.session.id, "gemini-3.5-flash")
 
         self.assertTrue(request.request_secret)
         self.assertTrue(completed.completed)
@@ -150,11 +189,12 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
             self.runs,
             self.secrets,
             verifier=verify,
+            model_discoverer=lambda provider_id, base_url, secret: ("grok-4",),
         )
         workflow.handle(self.session.id, "connect model")
         workflow.handle(self.session.id, "4")
-        workflow.handle(self.session.id, "grok-4")
-        completed = workflow.submit_secret(self.session.id, "xai-secret")
+        workflow.submit_secret(self.session.id, "xai-secret")
+        completed = workflow.handle(self.session.id, "grok-4")
 
         self.assertTrue(completed.completed)
         self.assertEqual(captured["provider"].base_url, "https://api.x.ai/v1")

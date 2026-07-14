@@ -178,7 +178,7 @@ class CliEndToEndTestCase(unittest.TestCase):
             try:
                 result = run_cli(
                     home,
-                    "connect a model\n8\n\n1\n/exit\n",
+                    "connect a model\n8\n\n1\n/model\n/exit\n",
                 )
             finally:
                 os.environ["PATH"] = previous_path
@@ -191,6 +191,11 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertEqual(config.models[0].name, "fast")
         self.assertEqual(config.models[0].model, "sonnet")
         self.assertFalse(config.models[0].supports_tools)
+        self.assertIn("No model has been used in this session yet", result.stdout)
+        self.assertIn("fast       sonnet", result.stdout)
+        self.assertIn("provider=claude-code", result.stdout)
+        success_tail = result.stdout.split("Switching to live model sonnet now.", 1)[1]
+        self.assertNotIn("Try: 连接模型", success_tail)
 
     def test_starter_understands_natural_arithmetic(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

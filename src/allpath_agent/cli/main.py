@@ -138,6 +138,7 @@ def _chat(
     if requested_session_id:
         application.record_capability_success("session_management")
     mode = "local starter" if demo else "live"
+    live_mode = not demo
     output(f"Allpath Agent ({mode} mode)")
     if demo:
         output("No model account is required yet. Your tools, memory, and sessions run locally.")
@@ -149,7 +150,7 @@ def _chat(
     while True:
         try:
             input_hint = connection_workflow.input_hint(active_session_id)
-            if input_hint is None and demo:
+            if input_hint is None and not live_mode:
                 input_hint = "Try: 连接模型 · what can you do · calculate 18 * 7"
             prompt = f"You>  ({input_hint})\n> " if input_hint else "You> "
             user_message = input_fn(prompt).strip()
@@ -173,7 +174,7 @@ def _chat(
         if user_message == "/help":
             output(
                 "Commands: /help, /new, /sessions, /resume <session-id>, "
-                "/models, /route, /capabilities, /dismiss [capability-id], /exit"
+                "/model, /models, /route, /capabilities, /dismiss [capability-id], /exit"
             )
             continue
         if user_message.startswith("/help "):
@@ -205,6 +206,9 @@ def _chat(
             continue
         if user_message == "/route":
             _show_latest_route(RoutingDecisionRepository(database), active_session_id, output)
+            continue
+        if user_message in {"/model", "/models current"}:
+            _show_current_model(home, database, active_session_id, output)
             continue
         if user_message == "/models" or user_message.startswith("/models "):
             action = user_message.removeprefix("/models").strip()
@@ -298,6 +302,7 @@ def _chat(
                         output,
                     )
             if connection_result.completed:
+                live_mode = True
                 application = _build_application(
                     home,
                     database,
@@ -588,6 +593,32 @@ def _show_latest_route(repository: RoutingDecisionRepository, session_id: str, o
     output(f"Reason: {decision['reason']}")
     output(f"Provider: {decision['provider']}")
     output(f"Model: {decision['model']}")
+
+
+def _show_current_model(home: Path, database: Database, session_id: str, output: Output) -> None:
+    if not (home / "config.toml").is_file():
+        output("Current mode: local starter")
+        output("Provider: default")
+        output("Model roles: demo-fast, demo-advanced")
+        return
+    config = load_config(home / "config.toml")
+    decision = RoutingDecisionRepository(database).latest_for_session(session_id)
+    if decision is not None:
+        profile = next(
+            (item for item in config.models if item.name == decision["profile"]),
+            None,
+        )
+        if profile is not None:
+            provider = config.providers[profile.provider]
+            output(f"Current role: {profile.name}")
+            output(f"Provider: {profile.provider}")
+            output(f"Model: {profile.model}")
+            output(f"Allpath tools: {'enabled' if profile.supports_tools else 'not available'}")
+            if provider.id == "openai-codex":
+                output("Provider sandbox: read-only (Codex CLI)")
+            return
+    output("No model has been used in this session yet. Configured roles:")
+    _show_models(config, output)
 
 
 def _close_interrupted_turn(messages: MessageRepository, session_id: str) -> None:

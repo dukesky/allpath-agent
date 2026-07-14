@@ -71,7 +71,7 @@ class AgentApplication:
             session_id,
             task_id,
             message,
-            self._system_prompt,
+            _runtime_system_prompt(self._system_prompt, decision.profile),
             decision.profile,
         )
         evidence = self._task_evidence(session_id, task_id, decision.profile.name)
@@ -116,6 +116,26 @@ def analyze_task(message: str) -> TaskSignals:
         modifies_code_or_files=any(phrase in lowered for phrase in code_phrases),
         high_risk=any(phrase in lowered for phrase in risk_phrases),
         asks_for_deep_analysis=any(phrase in lowered for phrase in deep_phrases),
+    )
+
+
+def _runtime_system_prompt(system_prompt: str, profile: ModelProfile) -> str:
+    tool_access = (
+        "Allpath tool schemas may be available for this task."
+        if profile.supports_tools
+        else "This model connection does not receive Allpath tool schemas."
+    )
+    external_boundary = (
+        " The Codex account provider runs through Codex CLI in a read-only sandbox."
+        if profile.provider == "openai-codex"
+        else ""
+    )
+    return (
+        f"{system_prompt}\n\n"
+        "Runtime identity (authoritative): "
+        f"role={profile.name}, provider={profile.provider}, model={profile.model}. "
+        f"{tool_access}{external_boundary} "
+        "When asked which model or permissions are active, report these exact values and do not guess."
     )
 
 

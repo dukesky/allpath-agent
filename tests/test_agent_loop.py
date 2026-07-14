@@ -30,6 +30,7 @@ from allpath_agent.storage import (
     ToolExecutionRepository,
 )
 from allpath_agent.tools import ToolContext, ToolRuntime, create_builtin_registry
+from allpath_agent.application import _runtime_system_prompt
 
 
 class MappingToolExecutor:
@@ -81,6 +82,22 @@ class AgentLoopTestCase(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
+
+    def test_runtime_prompt_reports_exact_model_and_provider_boundaries(self) -> None:
+        profile = ModelProfile(
+            "standard",
+            "gpt-5.5",
+            quality=7,
+            cost=4,
+            supports_tools=False,
+            provider="openai-codex",
+        )
+
+        prompt = _runtime_system_prompt("You are Allpath Agent.", profile)
+
+        self.assertIn("role=standard, provider=openai-codex, model=gpt-5.5", prompt)
+        self.assertIn("does not receive Allpath tool schemas", prompt)
+        self.assertIn("read-only sandbox", prompt)
 
     def test_completes_simple_conversation_and_persists_messages(self) -> None:
         provider = FakeProvider(

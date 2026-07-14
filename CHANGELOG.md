@@ -102,6 +102,9 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Preserved existing providers and model roles when adding or replacing one model connection.
 - Added an interactive `/models` manager for status, connection tests, role reassignment, safe removal, and model setup.
 - Added `/route` to explain the latest role, reason, provider, and model selection in the current session.
+- Added authoritative `/model` runtime identity and permission reporting.
+- Added exact role, provider, model, tool availability, and Codex read-only sandbox facts to each routed task prompt.
+- Fixed starter discovery hints remaining visible after a successful live model connection.
 - Added curated catalog fallback and restart-safe secret re-entry without persisting credentials in workflow state.
 - Added hidden API-key input and a mode-`0600` local secret store excluded from messages, workflow state, logs, and config.
 - Added real provider verification before atomic configuration replacement and same-session live-mode switching.

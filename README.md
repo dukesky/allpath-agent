@@ -209,7 +209,7 @@ allpath-agent --session <session-id> --demo
 allpath-agent --help
 ```
 
-Inside chat, use `/new`, `/sessions`, `/resume <session-id>`, `/models`, `/route`, `/capabilities`, `/dismiss`, `/help`, or `/exit`.
+Inside chat, use `/new`, `/sessions`, `/resume <session-id>`, `/model`, `/models`, `/route`, `/capabilities`, `/dismiss`, `/help`, or `/exit`.
 
 `/models` opens an arrow-key management menu that shows all three routing
 roles, adds or replaces a connection, tests every configured model, moves a
@@ -229,6 +229,12 @@ For scripting or terminals without interactive selection, use:
 
 `/route` explains the latest decision in the current session, including the
 role, routing reason, provider, and model ID.
+
+`/model` is the authoritative current-runtime view. It reports the most
+recently used role, provider, exact configured model ID, Allpath tool-schema
+availability, and provider sandbox boundary. Natural-language model identity
+questions receive the same runtime facts in the system prompt so the model
+does not need to guess its backend identity.
 
 ## Configuration direction
 

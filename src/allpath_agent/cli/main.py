@@ -41,6 +41,7 @@ from allpath_agent.workflows import (
 
 from .account_auth import ensure_codex_login
 from .approvals import TerminalApprovalHandler
+from .banner import launch_lines
 from .selector import terminal_select
 
 
@@ -137,14 +138,17 @@ def _chat(
     application.start_session(session.id)
     if requested_session_id:
         application.record_capability_success("session_management")
-    mode = "local starter" if demo else "live"
     live_mode = not demo
-    output(f"Allpath Agent ({mode} mode)")
-    if demo:
-        output("No model account is required yet. Your tools, memory, and sessions run locally.")
-        output("When you want real model reasoning, ask me about connecting a model.")
-    output(f"Session: {session.id}")
-    output("Type /help for commands or /exit to quit.")
+    configured_roles = ()
+    if live_mode:
+        configured_roles = tuple(profile.name for profile in load_config(home / "config.toml").models)
+    for line in launch_lines(
+        live_mode=live_mode,
+        session_id=session.id,
+        configured_roles=configured_roles,
+        capability_progress=application.capability_progress(),
+    ):
+        output(line)
 
     active_session_id = session.id
     while True:

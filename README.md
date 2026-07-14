@@ -6,6 +6,12 @@ Allpath Agent is a small personal AI agent that runs locally, learns its user's 
 
 The project is inspired by architectural lessons from Hermes Agent, but it is an independent implementation with a deliberately smaller core and a conversation-first onboarding experience.
 
+Interactive startup opens with a compact Allpath illustration and a state-aware
+launch card. A first run suggests conversational model setup and useful local
+tasks; a configured installation shows ready model roles and rotates toward the
+next capability the user has not yet learned. These hints are derived from
+local configuration and curriculum state and are never added to model context.
+
 ## Project status
 
 **Current phase:** Locally runnable MVP — persistence, routing, Agent Loop, tools, approvals, terminal sessions, task budgets, structured logs, and progressive capability learning are implemented.
@@ -29,6 +35,10 @@ See [MVP plan](docs/MVP_PLAN.md) for the acceptance criteria and implementation 
 ### Progressive capability discovery
 
 The agent maintains a curriculum of its own capabilities. It tracks whether each capability is locked, eligible, offered, tried, successful, habitual, or dismissed. After completing a task, it may recommend one relevant capability without interrupting the user's work.
+
+The same progress also shapes the launch card: completed, habitual, and
+dismissed lessons are skipped so startup guidance advances with the user rather
+than repeating a permanent tutorial.
 
 The current curriculum contains eight implemented capabilities. Suggestions appear only after the current answer, at most once per session. Recent suggestions receive a cross-session cooldown, successful actions advance progress automatically, and `/dismiss` suppresses unwanted lessons.
 

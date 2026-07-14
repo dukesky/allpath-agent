@@ -14,10 +14,11 @@ class LaunchBannerTestCase(unittest.TestCase):
         self.assertIn("ALLPATH", text)
         self.assertIn("local starter mode", text)
         self.assertIn("Session: session-123", text)
-        self.assertIn("TRY YOUR FIRST ACTION", text)
-        self.assertIn("Calculate locally", text)
-        self.assertIn("calculate 18 * (7 + 3)", text)
+        self.assertIn("START HERE", text)
+        self.assertIn("Connect your first reasoning model", text)
         self.assertIn("connect a model", text)
+        self.assertIn("messaging channel", text)
+        self.assertIn("automations", text)
 
     def test_live_banner_shows_models_and_next_unlearned_capability(self) -> None:
         text = "\n".join(

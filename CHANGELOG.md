@@ -108,7 +108,7 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added a compact Allpath startup illustration with full session and command status.
 - Added adaptive launch guidance that prioritizes conversational setup on first run and rotates through unlearned capabilities after models are connected.
 - Kept launch guidance outside conversation history and model context.
-- Replaced the starter launch command list with one focused first-action card for a no-account local calculation.
+- Made conversational model connection the focused first startup action, followed conceptually by messaging channels and automations.
 - Added curated catalog fallback and restart-safe secret re-entry without persisting credentials in workflow state.
 - Added hidden API-key input and a mode-`0600` local secret store excluded from messages, workflow state, logs, and config.
 - Added real provider verification before atomic configuration replacement and same-session live-mode switching.

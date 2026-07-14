@@ -12,10 +12,12 @@ tasks; a configured installation shows ready model roles and rotates toward the
 next capability the user has not yet learned. These hints are derived from
 local configuration and curriculum state and are never added to model context.
 
-The starter card deliberately highlights one complete first action rather than
-a menu of features: local calculation, with an exact phrase the user can type
-and an explanation that no model account is required. Model connection remains
-visible as the next step without blocking the first useful result.
+The starter card deliberately highlights one foundational first action rather
+than a menu of features: connecting a reasoning model in the conversation.
+The intended onboarding sequence is model connection, then a messaging channel
+such as Telegram, Slack, WhatsApp, or WeChat, then recurring automations. The
+banner only presents steps that the current build can actually complete;
+channel and automation walkthroughs become active as those connectors ship.
 
 ## Project status
 

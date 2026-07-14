@@ -43,9 +43,11 @@ def launch_lines(
     if not live_mode:
         lines.extend(
             (
-                "  Ask anything — setup happens inside the conversation.",
-                "  Start: connect a model",
-                "  Local: calculate 18 * 7  ·  what can you do?",
+                "  ╭─ TRY YOUR FIRST ACTION ─────────────────────────╮",
+                "  │ Calculate locally — no model account required. │",
+                "  │ Type: calculate 18 * (7 + 3)                   │",
+                "  ╰────────────────────────────────────────────────╯",
+                "  Ask anything. When ready for full reasoning: connect a model",
             )
         )
         return tuple(lines)

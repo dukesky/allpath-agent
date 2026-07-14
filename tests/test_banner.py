@@ -14,7 +14,9 @@ class LaunchBannerTestCase(unittest.TestCase):
         self.assertIn("ALLPATH", text)
         self.assertIn("local starter mode", text)
         self.assertIn("Session: session-123", text)
-        self.assertIn("setup happens inside the conversation", text)
+        self.assertIn("TRY YOUR FIRST ACTION", text)
+        self.assertIn("Calculate locally", text)
+        self.assertIn("calculate 18 * (7 + 3)", text)
         self.assertIn("connect a model", text)
 
     def test_live_banner_shows_models_and_next_unlearned_capability(self) -> None:

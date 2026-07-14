@@ -12,6 +12,11 @@ tasks; a configured installation shows ready model roles and rotates toward the
 next capability the user has not yet learned. These hints are derived from
 local configuration and curriculum state and are never added to model context.
 
+The starter card deliberately highlights one complete first action rather than
+a menu of features: local calculation, with an exact phrase the user can type
+and an explanation that no model account is required. Model connection remains
+visible as the next step without blocking the first useful result.
+
 ## Project status
 
 **Current phase:** Locally runnable MVP — persistence, routing, Agent Loop, tools, approvals, terminal sessions, task budgets, structured logs, and progressive capability learning are implemented.

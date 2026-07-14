@@ -40,6 +40,18 @@ preserving every other configured provider and model role.
 The running Agent application then rebuilds in live mode without changing the
 session.
 
+## Managing connected models
+
+Run `/models` inside chat to open the model-role manager. It displays
+`fast`, `standard`, and `advanced` assignments and offers actions to add or
+replace a model, test all connections, move a model to an empty role, remove a
+role, or explain the latest routing decision. Removal requires confirmation,
+cannot delete the final model role, and retains stored credentials.
+
+Use `/route` after a response to inspect the selected role, reason, provider,
+and model. Non-interactive equivalents are `/models test`,
+`/models move <from> <to>`, and `/models remove <role>`.
+
 ## Authentication paths
 
 - OpenAI, Anthropic, and OpenRouter request an API key through hidden terminal input.

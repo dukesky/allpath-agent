@@ -464,12 +464,66 @@ def _write_config_atomic(
         )
     providers[provider.id] = provider
     models[profile.name] = profile
+    _write_app_config_atomic(
+        path,
+        AppConfig(providers=providers, agent=agent, models=tuple(models.values())),
+    )
+
+
+def reassign_model_role(path: Path, source_role: str, target_role: str) -> None:
+    config = load_config(path)
+    models = {item.name: item for item in config.models}
+    if source_role not in models:
+        raise ValueError(f"model role is not configured: {source_role}")
+    if target_role not in {name for name, _ in PROFILE_OPTIONS}:
+        raise ValueError(f"unsupported model role: {target_role}")
+    if target_role in models and target_role != source_role:
+        raise ValueError(f"target model role is already configured: {target_role}")
+    source = models.pop(source_role)
+    quality, cost = {
+        "fast": (4, 1),
+        "standard": (7, 4),
+        "advanced": (10, 8),
+    }[target_role]
+    models[target_role] = ModelProfile(
+        name=target_role,
+        model=source.model,
+        quality=quality,
+        cost=cost,
+        supports_tools=source.supports_tools,
+        supports_vision=source.supports_vision,
+        max_context_tokens=source.max_context_tokens,
+        provider=source.provider,
+        input_cost_per_million=source.input_cost_per_million,
+        output_cost_per_million=source.output_cost_per_million,
+    )
+    _write_app_config_atomic(path, AppConfig(config.providers, config.agent, tuple(models.values())))
+
+
+def remove_model_role(path: Path, role: str) -> str | None:
+    config = load_config(path)
+    models = {item.name: item for item in config.models}
+    if role not in models:
+        raise ValueError(f"model role is not configured: {role}")
+    if len(models) == 1:
+        raise ValueError("cannot remove the last configured model role")
+    removed = models.pop(role)
+    providers = dict(config.providers)
+    removed_provider = None
+    if removed.provider not in {item.provider for item in models.values()}:
+        providers.pop(removed.provider, None)
+        removed_provider = removed.provider
+    _write_app_config_atomic(path, AppConfig(providers, config.agent, tuple(models.values())))
+    return removed_provider
+
+
+def _write_app_config_atomic(path: Path, config: AppConfig) -> None:
     lines: list[str] = []
-    for provider_id, configured in sorted(providers.items()):
+    for provider_id, configured in sorted(config.providers.items()):
         lines.extend(_serialize_provider(provider_id, configured))
-    lines.extend(_serialize_agent(agent))
-    for profile_name, configured in sorted(models.items()):
-        lines.extend(_serialize_profile(profile_name, configured))
+    lines.extend(_serialize_agent(config.agent))
+    for configured in sorted(config.models, key=lambda item: item.name):
+        lines.extend(_serialize_profile(configured.name, configured))
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(f"{path.suffix}.tmp")
     temporary.write_text("\n".join(lines), encoding="utf-8")

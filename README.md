@@ -209,7 +209,26 @@ allpath-agent --session <session-id> --demo
 allpath-agent --help
 ```
 
-Inside chat, use `/new`, `/sessions`, `/resume <session-id>`, `/capabilities`, `/dismiss`, `/help`, or `/exit`.
+Inside chat, use `/new`, `/sessions`, `/resume <session-id>`, `/models`, `/route`, `/capabilities`, `/dismiss`, `/help`, or `/exit`.
+
+`/models` opens an arrow-key management menu that shows all three routing
+roles, adds or replaces a connection, tests every configured model, moves a
+model into an unconfigured role, and safely removes a role after confirmation.
+The last model role cannot be removed. If removing a role leaves its provider
+unused, the provider configuration is removed while its saved credential is
+retained to avoid destructive secret deletion.
+
+For scripting or terminals without interactive selection, use:
+
+```text
+/models test
+/models move fast standard
+/models remove advanced
+/route
+```
+
+`/route` explains the latest decision in the current session, including the
+role, routing reason, provider, and model ID.
 
 ## Configuration direction
 

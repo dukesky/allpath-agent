@@ -54,6 +54,7 @@ class StorageTestCase(unittest.TestCase):
         self.assertEqual([message.role for message in messages.list_for_session(session.id)], ["user", "assistant"])
         self.assertEqual(routing.list_for_task(session.id, "task-1")[0]["profile"], "fast")
         self.assertEqual(routing.list_for_task(session.id, "task-1")[0]["provider"], "openai")
+        self.assertEqual(routing.latest_for_session(session.id)["task_id"], "task-1")
         self.assertEqual(sessions.get(session.id).title, "First conversation")
 
     def test_session_title_can_be_updated(self) -> None:

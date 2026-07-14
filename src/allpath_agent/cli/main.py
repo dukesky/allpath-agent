@@ -32,7 +32,12 @@ from allpath_agent.storage import (
     WorkflowRunRepository,
 )
 from allpath_agent.tools import ToolRuntime, create_builtin_registry
-from allpath_agent.workflows import ProviderConnectionWorkflow
+from allpath_agent.workflows import (
+    ProviderConnectionWorkflow,
+    reassign_model_role,
+    remove_model_role,
+    verify_provider_connection,
+)
 
 from .account_auth import ensure_codex_login
 from .approvals import TerminalApprovalHandler
@@ -168,7 +173,7 @@ def _chat(
         if user_message == "/help":
             output(
                 "Commands: /help, /new, /sessions, /resume <session-id>, "
-                "/capabilities, /dismiss [capability-id], /exit"
+                "/models, /route, /capabilities, /dismiss [capability-id], /exit"
             )
             continue
         if user_message.startswith("/help "):
@@ -198,6 +203,56 @@ def _chat(
             for capability_id, title, status in application.capability_progress():
                 output(f"{capability_id:<20} {status:<10} {title}")
             continue
+        if user_message == "/route":
+            _show_latest_route(RoutingDecisionRepository(database), active_session_id, output)
+            continue
+        if user_message == "/models" or user_message.startswith("/models "):
+            action = user_message.removeprefix("/models").strip()
+            if not (home / "config.toml").is_file():
+                output("No live models are configured. Starting model connection.")
+                user_message = "connect model"
+            elif action:
+                changed = _run_model_subcommand(home, action, output, error_output)
+                if changed:
+                    application = _build_application(home, database, False, input_fn, output)
+                    application.start_session(active_session_id)
+                continue
+            else:
+                _show_models(load_config(home / "config.toml"), output)
+                if selector_fn is None:
+                    output("Use /models test, /models move <from> <to>, or /models remove <role>.")
+                    continue
+                selected = selector_fn(
+                    "Manage models",
+                    (
+                        "Add or replace a model",
+                        "Test all model connections",
+                        "Reassign a model role",
+                        "Remove a model role",
+                        "Explain the latest route",
+                    ),
+                    False,
+                )
+                if selected is None:
+                    continue
+                if selected == 0:
+                    user_message = "connect model"
+                elif selected == 1:
+                    _test_models(home, output)
+                    continue
+                elif selected == 2:
+                    if _select_role_reassignment(home, selector_fn, output, error_output):
+                        application = _build_application(home, database, False, input_fn, output)
+                        application.start_session(active_session_id)
+                    continue
+                elif selected == 3:
+                    if _select_role_removal(home, selector_fn, output, error_output):
+                        application = _build_application(home, database, False, input_fn, output)
+                        application.start_session(active_session_id)
+                    continue
+                else:
+                    _show_latest_route(RoutingDecisionRepository(database), active_session_id, output)
+                    continue
         if user_message == "/dismiss" or user_message.startswith("/dismiss "):
             capability_id = user_message.removeprefix("/dismiss").strip() or None
             if application.dismiss_suggestion(active_session_id, capability_id):
@@ -437,6 +492,102 @@ def _show_providers(
         )
     output(f"Built-in provider types: {', '.join(available_provider_ids())}")
     return 0
+
+
+def _show_models(config: AppConfig, output: Output) -> None:
+    profiles = {profile.name: profile for profile in config.models}
+    output("Model roles:")
+    for role in ("fast", "standard", "advanced"):
+        profile = profiles.get(role)
+        if profile is None:
+            output(f"{role:<10} not configured")
+        else:
+            output(f"{role:<10} {profile.model:<28} provider={profile.provider}")
+
+
+def _run_model_subcommand(home: Path, action: str, output: Output, error_output: Output) -> bool:
+    parts = action.split()
+    try:
+        if parts == ["test"]:
+            _test_models(home, output)
+            return False
+        if len(parts) == 3 and parts[0] == "move":
+            reassign_model_role(home / "config.toml", parts[1], parts[2])
+            output(f"Model role moved: {parts[1]} → {parts[2]}.")
+            return True
+        if len(parts) == 2 and parts[0] == "remove":
+            removed_provider = remove_model_role(home / "config.toml", parts[1])
+            output(f"Removed model role: {parts[1]}.")
+            if removed_provider:
+                output(f"Unused provider {removed_provider} was removed; its saved credential was retained.")
+            return True
+    except (ConfigError, ValueError) as error:
+        error_output(f"Model management failed: {error}")
+        return False
+    error_output("Usage: /models test | /models move <from> <to> | /models remove <role>")
+    return False
+
+
+def _test_models(home: Path, output: Output) -> None:
+    config = load_config(home / "config.toml")
+    environment = SecretStore(home / "secrets.json").merged_environment()
+    for profile in sorted(config.models, key=lambda item: item.name):
+        provider = config.providers[profile.provider]
+        secret = environment.get(provider.api_key_env, "") if provider.api_key_env else ""
+        try:
+            verify_provider_connection(provider, profile, secret)
+        except Exception as error:
+            output(f"{profile.name:<10} failed  {type(error).__name__}: {str(error)[:160]}")
+        else:
+            output(f"{profile.name:<10} ok      {profile.provider}/{profile.model}")
+
+
+def _select_role_reassignment(home: Path, selector: Selector, output: Output, error_output: Output) -> bool:
+    config = load_config(home / "config.toml")
+    roles = tuple(profile.name for profile in config.models)
+    source = selector("Move which configured role?", roles, False)
+    if source is None:
+        return False
+    targets = tuple(
+        role
+        for role in ("fast", "standard", "advanced")
+        if role not in roles
+    )
+    if not targets:
+        error_output("All model roles are configured; use Add or replace a model instead.")
+        return False
+    target = selector("Assign it to which role?", targets, False)
+    if target is None:
+        return False
+    return _run_model_subcommand(
+        home,
+        f"move {roles[source]} {targets[target]}",
+        output,
+        error_output,
+    )
+
+
+def _select_role_removal(home: Path, selector: Selector, output: Output, error_output: Output) -> bool:
+    config = load_config(home / "config.toml")
+    roles = tuple(profile.name for profile in config.models)
+    selected = selector("Remove which role?", roles, False)
+    if selected is None:
+        return False
+    confirmed = selector(f"Remove {roles[selected]}?", ("Cancel", "Remove model role"), False)
+    if confirmed != 1:
+        return False
+    return _run_model_subcommand(home, f"remove {roles[selected]}", output, error_output)
+
+
+def _show_latest_route(repository: RoutingDecisionRepository, session_id: str, output: Output) -> None:
+    decision = repository.latest_for_session(session_id)
+    if decision is None:
+        output("No routing decision has been recorded in this session yet.")
+        return
+    output(f"Routed to: {decision['profile']}")
+    output(f"Reason: {decision['reason']}")
+    output(f"Provider: {decision['provider']}")
+    output(f"Model: {decision['model']}")
 
 
 def _close_interrupted_turn(messages: MessageRepository, session_id: str) -> None:

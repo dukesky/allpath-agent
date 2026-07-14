@@ -105,6 +105,19 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Agent [advanced]>", result.stdout)
 
+    def test_route_command_explains_latest_model_decision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = run_cli(
+                Path(directory),
+                "请深入分析这个问题\n/route\n/exit\n",
+                "--demo",
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Routed to: advanced", result.stdout)
+        self.assertIn("Reason: advanced task complexity score", result.stdout)
+        self.assertIn("Provider: default", result.stdout)
+        self.assertIn("Model: demo-advanced", result.stdout)
+
     def test_terminal_approval_allows_memory_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)

@@ -9,7 +9,11 @@ from allpath_agent.config import load_config
 from allpath_agent.provider_runtime import build_provider_pool
 from allpath_agent.secrets import SecretStore
 from allpath_agent.storage import Database, SessionRepository, WorkflowRunRepository
-from allpath_agent.workflows import ProviderConnectionWorkflow
+from allpath_agent.workflows import (
+    ProviderConnectionWorkflow,
+    reassign_model_role,
+    remove_model_role,
+)
 
 
 class ProviderConnectionWorkflowTestCase(unittest.TestCase):
@@ -234,6 +238,35 @@ class ProviderConnectionWorkflowTestCase(unittest.TestCase):
             set(self.secrets.values()),
             {"ANTHROPIC_API_KEY", "OPENAI_API_KEY"},
         )
+
+    def test_model_roles_can_be_reassigned_and_removed_safely(self) -> None:
+        self.workflow.handle(self.session.id, "connect model")
+        self.workflow.handle(self.session.id, "1")
+        self.workflow.submit_secret(self.session.id, "openai-secret")
+        self.workflow.handle(self.session.id, "test-model")
+        self.workflow.handle(self.session.id, "fast")
+
+        self.workflow.handle(self.session.id, "connect model")
+        self.workflow.handle(self.session.id, "3")
+        self.workflow.handle(self.session.id, "3")
+        self.workflow.submit_secret(self.session.id, "anthropic-secret")
+        self.workflow.handle(self.session.id, "test-model")
+        self.workflow.handle(self.session.id, "advanced")
+
+        reassign_model_role(self.home / "config.toml", "fast", "standard")
+        moved = load_config(self.home / "config.toml")
+        moved_profiles = {profile.name: profile for profile in moved.models}
+        self.assertEqual(set(moved_profiles), {"advanced", "standard"})
+        self.assertEqual(moved_profiles["standard"].provider, "openai")
+        self.assertEqual(moved_profiles["standard"].quality, 7)
+
+        removed_provider = remove_model_role(self.home / "config.toml", "advanced")
+        remaining = load_config(self.home / "config.toml")
+        self.assertEqual(removed_provider, "anthropic")
+        self.assertEqual(tuple(remaining.providers), ("openai",))
+        self.assertEqual(remaining.models[0].name, "standard")
+        with self.assertRaisesRegex(ValueError, "last configured"):
+            remove_model_role(self.home / "config.toml", "standard")
 
 
 if __name__ == "__main__":

@@ -171,6 +171,19 @@ class RoutingDecisionRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def latest_for_session(self, session_id: str) -> dict[str, Any] | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM routing_decisions
+                WHERE session_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
 
 class MemoryRepository:
     def __init__(self, database: Database):

@@ -127,6 +127,8 @@ The format follows Keep a Changelog conventions. During development, changes acc
 
 ### Changed
 
+- Fixed Slack App-Level Token verification to pass the required explicit `app_token` argument to `apps.connections.open`.
+
 - Defined the first release as a locally runnable terminal agent before messaging-channel integrations.
 
 ### Fixed

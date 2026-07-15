@@ -151,6 +151,31 @@ class TelegramConnectorTestCase(unittest.TestCase):
 
 
 class SlackConnectorTestCase(unittest.TestCase):
+    def test_token_verification_passes_app_token_as_required_keyword(self) -> None:
+        from allpath_agent.connectors import verify_slack_tokens
+
+        calls = []
+
+        class Client:
+            def __init__(self, token=None):
+                self.token = token
+
+            def auth_test(self):
+                calls.append(("auth_test", self.token))
+                return {"team": "Test Workspace", "user": "allpath"}
+
+            def apps_connections_open(self, *, app_token):
+                calls.append(("apps_connections_open", app_token))
+                return {"ok": True, "url": "wss://example"}
+
+        detail = verify_slack_tokens("xoxb-bot", "xapp-app", client_factory=Client)
+
+        self.assertEqual(detail, "Test Workspace / allpath")
+        self.assertEqual(
+            calls,
+            [("auth_test", "xoxb-bot"), ("apps_connections_open", "xapp-app")],
+        )
+
     def test_socket_event_is_acknowledged_normalized_and_replied_in_thread(self) -> None:
         from allpath_agent.connectors import SlackConnector
 

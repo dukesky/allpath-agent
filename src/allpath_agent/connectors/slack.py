@@ -91,11 +91,17 @@ class SlackConnector:
         )
 
 
-def verify_slack_tokens(bot_token: str, app_token: str) -> str:
-    from slack_sdk.web import WebClient
+def verify_slack_tokens(
+    bot_token: str,
+    app_token: str,
+    client_factory: Callable[..., Any] | None = None,
+) -> str:
+    if client_factory is None:
+        from slack_sdk.web import WebClient
 
-    bot = WebClient(token=bot_token).auth_test()
-    WebClient(token=app_token).apps_connections_open()
+        client_factory = WebClient
+    bot = client_factory(token=bot_token).auth_test()
+    client_factory().apps_connections_open(app_token=app_token)
     team = bot.get("team") or "Slack workspace"
     user = bot.get("user") or bot.get("user_id") or "bot"
     return f"{team} / {user}"

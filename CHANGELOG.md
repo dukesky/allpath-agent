@@ -15,6 +15,9 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added resumable conversational Telegram setup with BotFather guidance, hidden token input, real bot verification, and persisted activation status.
 - Added `allpath-agent connectors` status and a foreground `allpath-agent gateway` runner with graceful interruption and default-deny side-effect approvals.
 - Advanced live startup onboarding to Telegram after model setup and before optional capability lessons.
+- Added a Slack Socket Mode connector using the official Python Slack SDK, including event acknowledgement, DM normalization, thread replies, and bot-event filtering.
+- Added resumable conversational Slack setup with separate hidden Bot and App-Level tokens, real `auth.test` and `apps.connections.open` verification, and restart-safe secret re-entry.
+- Extended the gateway to run Telegram and Slack together and advanced startup onboarding from Telegram to Slack.
 - Added the initial product design for conversation-first onboarding and progressive capability discovery.
 - Added the initial single-process architecture and package boundaries.
 - Added a model router with hard requirement filtering and complexity-based selection.

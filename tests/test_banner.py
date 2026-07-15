@@ -26,7 +26,7 @@ class LaunchBannerTestCase(unittest.TestCase):
                 live_mode=True,
                 session_id="session-456",
                 configured_roles=("fast", "advanced"),
-                configured_connectors=("telegram",),
+                configured_connectors=("telegram", "slack"),
                 capability_progress=(
                     ("durable_memory", "Durable memory", "habitual"),
                     ("current_time", "Current time", "unseen"),
@@ -51,6 +51,18 @@ class LaunchBannerTestCase(unittest.TestCase):
 
         self.assertIn("Next: connect Telegram", text)
         self.assertNotIn("remember that I prefer", text)
+
+    def test_live_banner_prioritizes_slack_after_telegram(self) -> None:
+        text = "\n".join(
+            launch_lines(
+                live_mode=True,
+                session_id="session-slack",
+                configured_roles=("standard",),
+                configured_connectors=("telegram",),
+            )
+        )
+
+        self.assertIn("Next: connect Slack", text)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from allpath_agent.agent import AgentLoop, BudgetExceededError, IterationLimitEr
 from allpath_agent.application import AgentApplication, demo_profiles
 from allpath_agent.config import AppConfig, ConfigError, load_config, resolve_home, write_default_config
 from allpath_agent.curriculum import CurriculumEngine, CurriculumService, default_capabilities
-from allpath_agent.connectors import ConnectorRegistry, ConnectorRuntime, TelegramConnector
+from allpath_agent.connectors import ConnectorRegistry, ConnectorRuntime, SlackConnector, TelegramConnector
 from allpath_agent.models import DemoProvider, ModelRouter, ProviderError, ProviderPool
 from allpath_agent.observability import JsonlEventLogger
 from allpath_agent.provider_runtime import (
@@ -38,6 +38,7 @@ from allpath_agent.storage import (
 from allpath_agent.tools import ToolRuntime, create_builtin_registry
 from allpath_agent.workflows import (
     ProviderConnectionWorkflow,
+    SlackConnectionWorkflow,
     TelegramConnectionWorkflow,
     reassign_model_role,
     remove_model_role,
@@ -148,6 +149,11 @@ def _chat(
         SecretStore(home / "secrets.json"),
     )
     telegram_workflow = TelegramConnectionWorkflow(
+        WorkflowRunRepository(database),
+        SecretStore(home / "secrets.json"),
+        ConnectorConfigRepository(database),
+    )
+    slack_workflow = SlackConnectionWorkflow(
         WorkflowRunRepository(database),
         SecretStore(home / "secrets.json"),
         ConnectorConfigRepository(database),
@@ -298,8 +304,23 @@ def _chat(
                 error_output("No capability suggestion found to dismiss.")
             continue
 
-        if _requests_telegram_setup(user_message) and not (home / "config.toml").is_file():
-            output("Agent [setup]> Connect a reasoning model first, then connect Telegram.")
+        if (_requests_telegram_setup(user_message) or _requests_slack_setup(user_message)) and not (home / "config.toml").is_file():
+            output("Agent [setup]> Connect a reasoning model first, then connect a messaging channel.")
+            continue
+        slack_result = slack_workflow.handle(active_session_id, user_message)
+        if slack_result.handled:
+            for message in slack_result.messages:
+                output(f"Agent [setup]> {message}")
+            while slack_result.request_secret:
+                try:
+                    secret = hidden_input(slack_workflow.secret_prompt(active_session_id))
+                except (EOFError, KeyboardInterrupt):
+                    output("")
+                    error_output("Secret input cancelled. Slack setup is still resumable.")
+                    break
+                slack_result = slack_workflow.submit_secret(active_session_id, secret)
+                for message in slack_result.messages:
+                    output(f"Agent [setup]> {message}")
             continue
         telegram_result = telegram_workflow.handle(active_session_id, user_message)
         if telegram_result.handled:
@@ -569,6 +590,13 @@ def _requests_telegram_setup(message: str) -> bool:
     )
 
 
+def _requests_slack_setup(message: str) -> bool:
+    lowered = message.lower()
+    return "slack" in lowered and any(
+        phrase in lowered for phrase in ("connect", "setup", "set up", "连接", "配置", "设置")
+    )
+
+
 def _run_gateway(
     home: Path,
     database: Database,
@@ -579,16 +607,27 @@ def _run_gateway(
 ) -> int:
     if poll_interval < 0:
         raise ConfigError("gateway poll interval cannot be negative")
-    config = ConnectorConfigRepository(database).get("telegram")
-    if config is None or config["status"] != "active":
-        raise ConfigError("Telegram is not active. Start Allpath and say: connect Telegram")
-    token = SecretStore(home / "secrets.json").values().get("TELEGRAM_BOT_TOKEN")
-    if not token:
-        raise ConfigError("Telegram token is missing; reconnect Telegram")
-    connector = TelegramConnector(token)
-    status = connector.status()
-    if not status.connected:
-        raise ConfigError(f"Telegram verification failed: {status.detail}")
+    configs = ConnectorConfigRepository(database).list_all()
+    active_ids = {record["connector_id"] for record in configs if record["status"] == "active"}
+    if not active_ids:
+        raise ConfigError("No active connectors. Connect Telegram or Slack in Allpath first")
+    secrets = SecretStore(home / "secrets.json").values()
+    connectors = []
+    if "telegram" in active_ids:
+        token = secrets.get("TELEGRAM_BOT_TOKEN")
+        if not token:
+            raise ConfigError("Telegram token is missing; reconnect Telegram")
+        connectors.append(TelegramConnector(token))
+    if "slack" in active_ids:
+        bot_token = secrets.get("SLACK_BOT_TOKEN")
+        app_token = secrets.get("SLACK_APP_TOKEN")
+        if not bot_token or not app_token:
+            raise ConfigError("Slack tokens are missing; reconnect Slack")
+        connectors.append(SlackConnector(bot_token, app_token))
+    statuses = [connector.status() for connector in connectors]
+    failed = next((status for status in statuses if not status.connected), None)
+    if failed:
+        raise ConfigError(f"{failed.id} verification failed: {failed.detail}")
     application = _build_application(
         home,
         database,
@@ -597,19 +636,22 @@ def _run_gateway(
         output,
         interactive_approvals=False,
     )
+    registry = ConnectorRegistry(tuple(connectors))
     runtime = ConnectorRuntime(
         application,
-        ConnectorRegistry((connector,)),
+        registry,
         SessionRepository(database),
         ConnectorSessionRepository(database),
     )
-    output(f"Allpath gateway running: Telegram {status.detail}")
+    output("Allpath gateway running: " + ", ".join(f"{status.id} {status.detail}" for status in statuses))
     output("Side-effecting tools are denied unless a channel-safe approval flow is added.")
     try:
+        runtime.start_all()
         while True:
-            processed = runtime.poll_once("telegram")
-            if processed:
-                output(f"Telegram: processed {processed} message(s)")
+            for connector_id in registry.ids():
+                processed = runtime.poll_once(connector_id)
+                if processed:
+                    output(f"{connector_id}: processed {processed} message(s)")
             if once:
                 return 0
             time.sleep(poll_interval)
@@ -620,6 +662,8 @@ def _run_gateway(
     except Exception as error:
         error_output(f"Gateway error: {type(error).__name__}: {str(error)[:240]}")
         return 1
+    finally:
+        runtime.stop_all()
 
 
 def _show_models(config: AppConfig, output: Output) -> None:

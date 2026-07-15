@@ -43,6 +43,12 @@ class FakeConnector:
     def status(self) -> ConnectorStatus:
         return ConnectorStatus(self.id, True, "ready")
 
+    def start(self):
+        return None
+
+    def stop(self):
+        return None
+
     def poll(self):
         events, self.events = self.events, ()
         return events
@@ -142,6 +148,60 @@ class TelegramConnectorTestCase(unittest.TestCase):
         self.assertTrue(status.connected)
         self.assertEqual(status.detail, "@allpath_test_bot")
         self.assertNotIn("private-token", status.detail)
+
+
+class SlackConnectorTestCase(unittest.TestCase):
+    def test_socket_event_is_acknowledged_normalized_and_replied_in_thread(self) -> None:
+        from allpath_agent.connectors import SlackConnector
+
+        acknowledgements = []
+        posts = []
+
+        class Client:
+            def __init__(self):
+                self.socket_mode_request_listeners = []
+                self.web_client = SimpleNamespace(chat_postMessage=lambda **kwargs: posts.append(kwargs))
+
+            def connect(self):
+                return None
+
+            def disconnect(self):
+                return None
+
+            def send_socket_mode_response(self, response):
+                acknowledgements.append(response)
+
+        client = Client()
+        connector = SlackConnector(
+            "xoxb-bot",
+            "xapp-app",
+            client_factory=lambda bot, app: client,
+            verifier=lambda bot, app: "Test Workspace / allpath",
+            response_factory=lambda envelope: {"envelope_id": envelope},
+        )
+        connector.start()
+        request = SimpleNamespace(
+            type="events_api",
+            envelope_id="env-1",
+            payload={
+                "event": {
+                    "type": "message",
+                    "channel": "D123",
+                    "user": "U123",
+                    "ts": "1700.25",
+                    "text": " hello slack ",
+                }
+            },
+        )
+        client.socket_mode_request_listeners[0](client, request)
+        event = connector.poll()[0]
+        connector.send(OutboundMessage("D123", "reply", metadata=event.metadata))
+        connector.stop()
+
+        self.assertEqual(acknowledgements, [{"envelope_id": "env-1"}])
+        self.assertEqual(event.text, "hello slack")
+        self.assertEqual(event.conversation_id, "D123")
+        self.assertEqual(posts, [{"channel": "D123", "text": "reply", "thread_ts": "1700.25"}])
 
 
 if __name__ == "__main__":

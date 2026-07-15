@@ -64,9 +64,38 @@ bounded polling retry/backoff, and process supervision remain the next step.
 - Platform adapters cannot bypass model routing, budgets, tool validation, or
   approvals.
 
+## Slack Socket Mode adapter
+
+Slack uses the official Python Slack SDK and Socket Mode, so a local Allpath
+installation does not need a public webhook URL. Setup requires two credentials:
+
+- a Bot Token beginning with `xoxb-`;
+- an App-Level Token beginning with `xapp-` and the `connections:write` scope.
+
+In Slack's app configuration:
+
+1. Create an app at [Slack API apps](https://api.slack.com/apps).
+2. Add the `chat:write` bot scope.
+3. Enable the App Home Messages tab.
+4. Enable Event Subscriptions and subscribe to the `message.im` bot event.
+5. Enable Socket Mode.
+6. Create an App-Level Token with `connections:write`.
+7. Install the app to the workspace and copy the Bot Token.
+8. In Allpath, say `connect Slack` and enter both tokens through hidden input.
+9. Restart `allpath-agent gateway`.
+
+Allpath verifies the Bot Token with `auth.test` and verifies Socket Mode access
+with `apps.connections.open` before activation. Socket envelopes are
+acknowledged immediately, bot/subtype events are ignored, direct messages are
+normalized into the shared connector contract, and replies remain in the
+originating Slack thread.
+
+Official references: [Slack Socket Mode client](https://docs.slack.dev/tools/python-slack-sdk/socket-mode/)
+and [Python Slack SDK](https://docs.slack.dev/tools/python-slack-sdk/).
+
 ## Next implementation
 
 1. Add bounded polling retries and privacy-safe connector lifecycle logs.
 2. Add background service installation and process supervision.
 3. Add Telegram disconnect/rotate-token management.
-4. Build the Slack adapter against the same contracts.
+4. Add channel mentions and explicit channel allowlists for Slack.

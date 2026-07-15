@@ -47,6 +47,14 @@ class ConnectorRuntime:
             self.dispatch(event)
         return len(events)
 
+    def start_all(self) -> None:
+        for connector_id in self._registry.ids():
+            self._registry.get(connector_id).start()
+
+    def stop_all(self) -> None:
+        for connector_id in reversed(self._registry.ids()):
+            self._registry.get(connector_id).stop()
+
     def dispatch(self, event: InboundMessage) -> str:
         if event.connector_id not in self._registry.ids():
             raise ValueError(f"connector is not registered: {event.connector_id}")
@@ -71,6 +79,7 @@ class ConnectorRuntime:
                 conversation_id=event.conversation_id,
                 text=result.agent.content,
                 reply_to_message_id=event.message_id,
+                metadata=event.metadata,
             )
         )
         return session_id

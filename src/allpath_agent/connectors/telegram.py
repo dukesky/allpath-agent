@@ -38,6 +38,12 @@ class TelegramConnector:
         except Exception as error:
             return ConnectorStatus(self.id, False, f"{type(error).__name__}: {str(error)[:160]}")
 
+    def start(self) -> None:
+        return None
+
+    def stop(self) -> None:
+        return None
+
     def poll(self) -> tuple[InboundMessage, ...]:
         payload = self._call(
             "getUpdates",

@@ -372,6 +372,12 @@ class CliInterruptTestCase(unittest.TestCase):
                 def poll(self):
                     return ()
 
+                def start(self):
+                    return None
+
+                def stop(self):
+                    return None
+
                 def send(self, message):
                     raise AssertionError("no message should be sent")
 

@@ -59,6 +59,9 @@ def launch_lines(
     if "telegram" not in set(configured_connectors):
         lines.append("  Next: connect Telegram")
         return tuple(lines)
+    if "slack" not in set(configured_connectors):
+        lines.append("  Next: connect Slack")
+        return tuple(lines)
     learned = {capability_id: status for capability_id, _, status in capability_progress}
     next_hint = next(
         (

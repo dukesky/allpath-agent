@@ -129,6 +129,12 @@ setup with BotFather guidance and hidden token verification, and a foreground
 gateway runner are implemented. Connect a model first, say `connect Telegram`,
 then run `allpath-agent gateway` to receive and answer Telegram messages.
 
+Slack is also supported through official Socket Mode. After Telegram—or
+directly after model setup—say `connect Slack`, follow the in-chat Slack app
+instructions, and enter the `xoxb-` Bot Token plus `xapp-` App-Level Token
+through hidden inputs. The same gateway process can run Telegram and Slack
+together.
+
 ## Architecture
 
 ```text

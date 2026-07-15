@@ -18,6 +18,7 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added a Slack Socket Mode connector using the official Python Slack SDK, including event acknowledgement, DM normalization, thread replies, and bot-event filtering.
 - Added resumable conversational Slack setup with separate hidden Bot and App-Level tokens, real `auth.test` and `apps.connections.open` verification, and restart-safe secret re-entry.
 - Extended the gateway to run Telegram and Slack together and advanced startup onboarding from Telegram to Slack.
+- Added an official WhatsApp Cloud API connector with signed local webhooks, Graph API text replies, credential verification, conversational setup, and gateway integration.
 - Added the initial product design for conversation-first onboarding and progressive capability discovery.
 - Added the initial single-process architecture and package boundaries.
 - Added a model router with hard requirement filtering and complexity-based selection.
@@ -126,6 +127,8 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added an isolated, idempotent installer E2E test that launches the installed command.
 
 ### Changed
+
+- Slack replies now stay in the main conversation for direct messages, preserve existing threads, and create threads for channel messages.
 
 - Fixed Slack App-Level Token verification to pass the required explicit `app_token` argument to `apps.connections.open`.
 

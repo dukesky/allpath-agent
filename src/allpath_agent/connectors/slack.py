@@ -78,6 +78,12 @@ class SlackConnector:
         timestamp = event.get("ts")
         if not isinstance(text, str) or not channel or not timestamp:
             return
+        channel_type = event.get("channel_type")
+        is_direct_message = channel_type == "im" or str(channel).startswith("D")
+        thread_ts = event.get("thread_ts")
+        if not thread_ts and not is_direct_message:
+            thread_ts = timestamp
+        metadata = {"thread_ts": thread_ts} if thread_ts else {}
         self._events.append(
             InboundMessage(
                 connector_id=self.id,
@@ -86,7 +92,7 @@ class SlackConnector:
                 message_id=str(timestamp),
                 text=text.strip(),
                 received_at=datetime.now(UTC).isoformat(),
-                metadata={"thread_ts": event.get("thread_ts") or timestamp},
+                metadata=metadata,
             )
         )
 

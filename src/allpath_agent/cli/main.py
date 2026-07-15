@@ -11,7 +11,13 @@ from allpath_agent.agent import AgentLoop, BudgetExceededError, IterationLimitEr
 from allpath_agent.application import AgentApplication, demo_profiles
 from allpath_agent.config import AppConfig, ConfigError, load_config, resolve_home, write_default_config
 from allpath_agent.curriculum import CurriculumEngine, CurriculumService, default_capabilities
-from allpath_agent.connectors import ConnectorRegistry, ConnectorRuntime, SlackConnector, TelegramConnector
+from allpath_agent.connectors import (
+    ConnectorRegistry,
+    ConnectorRuntime,
+    SlackConnector,
+    TelegramConnector,
+    WhatsAppConnector,
+)
 from allpath_agent.models import DemoProvider, ModelRouter, ProviderError, ProviderPool
 from allpath_agent.observability import JsonlEventLogger
 from allpath_agent.provider_runtime import (
@@ -40,6 +46,7 @@ from allpath_agent.workflows import (
     ProviderConnectionWorkflow,
     SlackConnectionWorkflow,
     TelegramConnectionWorkflow,
+    WhatsAppConnectionWorkflow,
     reassign_model_role,
     remove_model_role,
     verify_provider_connection,
@@ -154,6 +161,11 @@ def _chat(
         ConnectorConfigRepository(database),
     )
     slack_workflow = SlackConnectionWorkflow(
+        WorkflowRunRepository(database),
+        SecretStore(home / "secrets.json"),
+        ConnectorConfigRepository(database),
+    )
+    whatsapp_workflow = WhatsAppConnectionWorkflow(
         WorkflowRunRepository(database),
         SecretStore(home / "secrets.json"),
         ConnectorConfigRepository(database),
@@ -304,8 +316,27 @@ def _chat(
                 error_output("No capability suggestion found to dismiss.")
             continue
 
-        if (_requests_telegram_setup(user_message) or _requests_slack_setup(user_message)) and not (home / "config.toml").is_file():
+        if (
+            _requests_telegram_setup(user_message)
+            or _requests_slack_setup(user_message)
+            or _requests_whatsapp_setup(user_message)
+        ) and not (home / "config.toml").is_file():
             output("Agent [setup]> Connect a reasoning model first, then connect a messaging channel.")
+            continue
+        whatsapp_result = whatsapp_workflow.handle(active_session_id, user_message)
+        if whatsapp_result.handled:
+            for message in whatsapp_result.messages:
+                output(f"Agent [setup]> {message}")
+            while whatsapp_result.request_secret:
+                try:
+                    secret = hidden_input(whatsapp_workflow.secret_prompt(active_session_id))
+                except (EOFError, KeyboardInterrupt):
+                    output("")
+                    error_output("Secret input cancelled. WhatsApp setup is still resumable.")
+                    break
+                whatsapp_result = whatsapp_workflow.submit_secret(active_session_id, secret)
+                for message in whatsapp_result.messages:
+                    output(f"Agent [setup]> {message}")
             continue
         slack_result = slack_workflow.handle(active_session_id, user_message)
         if slack_result.handled:
@@ -597,6 +628,13 @@ def _requests_slack_setup(message: str) -> bool:
     )
 
 
+def _requests_whatsapp_setup(message: str) -> bool:
+    lowered = message.lower()
+    return "whatsapp" in lowered and any(
+        phrase in lowered for phrase in ("connect", "setup", "set up", "连接", "配置", "设置")
+    )
+
+
 def _run_gateway(
     home: Path,
     database: Database,
@@ -610,7 +648,7 @@ def _run_gateway(
     configs = ConnectorConfigRepository(database).list_all()
     active_ids = {record["connector_id"] for record in configs if record["status"] == "active"}
     if not active_ids:
-        raise ConfigError("No active connectors. Connect Telegram or Slack in Allpath first")
+        raise ConfigError("No active connectors. Connect Telegram, Slack, or WhatsApp in Allpath first")
     secrets = SecretStore(home / "secrets.json").values()
     connectors = []
     if "telegram" in active_ids:
@@ -624,6 +662,16 @@ def _run_gateway(
         if not bot_token or not app_token:
             raise ConfigError("Slack tokens are missing; reconnect Slack")
         connectors.append(SlackConnector(bot_token, app_token))
+    if "whatsapp" in active_ids:
+        access_token = secrets.get("WHATSAPP_ACCESS_TOKEN")
+        phone_number_id = secrets.get("WHATSAPP_PHONE_NUMBER_ID")
+        app_secret = secrets.get("WHATSAPP_APP_SECRET")
+        verify_token = secrets.get("WHATSAPP_VERIFY_TOKEN")
+        if not all((access_token, phone_number_id, app_secret, verify_token)):
+            raise ConfigError("WhatsApp credentials are missing; reconnect WhatsApp")
+        connectors.append(
+            WhatsAppConnector(access_token, phone_number_id, app_secret, verify_token)
+        )
     statuses = [connector.status() for connector in connectors]
     failed = next((status for status in statuses if not status.connected), None)
     if failed:

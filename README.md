@@ -121,7 +121,7 @@ The first locally runnable MVP includes:
 - interruption and graceful shutdown;
 - automated unit and local integration tests.
 
-The MVP intentionally excludes Slack, WhatsApp, subagents, browser automation, a desktop application, and hosted multi-user infrastructure. Those come after the local core is reliable.
+The MVP intentionally excludes subagents, browser automation, a desktop application, and hosted multi-user infrastructure. Those come after the local core is reliable.
 
 The first messaging milestone is available: connector contracts, registry,
 runtime dispatch, persistent platform-conversation session mapping, Telegram
@@ -132,8 +132,23 @@ then run `allpath-agent gateway` to receive and answer Telegram messages.
 Slack is also supported through official Socket Mode. After Telegram—or
 directly after model setup—say `connect Slack`, follow the in-chat Slack app
 instructions, and enter the `xoxb-` Bot Token plus `xapp-` App-Level Token
-through hidden inputs. The same gateway process can run Telegram and Slack
-together.
+through hidden inputs. Direct-message replies stay in the main conversation;
+existing threads remain threaded, while channel replies start a thread to avoid
+channel noise.
+
+WhatsApp is supported through Meta's official Cloud API. Say `connect WhatsApp`
+and provide the Access Token, Phone Number ID, App Secret, and a verify token
+through hidden inputs. Then run `allpath-agent gateway`, expose local port
+`8787` through an HTTPS tunnel, and configure the Meta webhook callback as
+`https://<public-host>/webhooks/whatsapp` with the same verify token. Subscribe
+the WhatsApp webhook to `messages`. Telegram, Slack, and WhatsApp can run in the
+same gateway process.
+
+The WhatsApp connector deliberately does not use unofficial QR-code or
+WhatsApp Web automation. The official Cloud API requires a Meta Business app,
+a public HTTPS webhook, and compliance with Meta's messaging policies. The
+current MVP handles inbound and outbound text inside the customer-service
+window; proactive conversations may require an approved message template.
 
 ## Architecture
 

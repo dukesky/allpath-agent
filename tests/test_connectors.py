@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import hashlib
+import hmac
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -176,7 +179,7 @@ class SlackConnectorTestCase(unittest.TestCase):
             [("auth_test", "xoxb-bot"), ("apps_connections_open", "xapp-app")],
         )
 
-    def test_socket_event_is_acknowledged_normalized_and_replied_in_thread(self) -> None:
+    def test_direct_message_reply_stays_in_main_conversation(self) -> None:
         from allpath_agent.connectors import SlackConnector
 
         acknowledgements = []
@@ -226,7 +229,102 @@ class SlackConnectorTestCase(unittest.TestCase):
         self.assertEqual(acknowledgements, [{"envelope_id": "env-1"}])
         self.assertEqual(event.text, "hello slack")
         self.assertEqual(event.conversation_id, "D123")
-        self.assertEqual(posts, [{"channel": "D123", "text": "reply", "thread_ts": "1700.25"}])
+        self.assertEqual(posts, [{"channel": "D123", "text": "reply"}])
+
+    def test_existing_thread_reply_stays_in_thread(self) -> None:
+        from allpath_agent.connectors import SlackConnector
+
+        posts = []
+        client = SimpleNamespace(
+            socket_mode_request_listeners=[],
+            web_client=SimpleNamespace(chat_postMessage=lambda **kwargs: posts.append(kwargs)),
+            connect=lambda: None,
+            disconnect=lambda: None,
+            send_socket_mode_response=lambda response: None,
+        )
+        connector = SlackConnector(
+            "xoxb-bot", "xapp-app", client_factory=lambda bot, app: client,
+            verifier=lambda bot, app: "ok", response_factory=lambda envelope: envelope,
+        )
+        connector.start()
+        client.socket_mode_request_listeners[0](client, SimpleNamespace(
+            type="events_api", envelope_id="env", payload={"event": {
+                "type": "message", "channel": "D123", "channel_type": "im",
+                "user": "U123", "ts": "1701", "thread_ts": "1700", "text": "thread",
+            }}
+        ))
+        event = connector.poll()[0]
+        connector.send(OutboundMessage("D123", "reply", metadata=event.metadata))
+
+        self.assertEqual(posts, [{"channel": "D123", "text": "reply", "thread_ts": "1700"}])
+
+    def test_channel_root_message_is_replied_to_in_thread(self) -> None:
+        from allpath_agent.connectors import SlackConnector
+
+        posts = []
+        client = SimpleNamespace(
+            socket_mode_request_listeners=[],
+            web_client=SimpleNamespace(chat_postMessage=lambda **kwargs: posts.append(kwargs)),
+            connect=lambda: None,
+            disconnect=lambda: None,
+            send_socket_mode_response=lambda response: None,
+        )
+        connector = SlackConnector(
+            "xoxb-bot", "xapp-app", client_factory=lambda bot, app: client,
+            verifier=lambda bot, app: "ok", response_factory=lambda envelope: envelope,
+        )
+        connector.start()
+        client.socket_mode_request_listeners[0](client, SimpleNamespace(
+            type="events_api", envelope_id="env", payload={"event": {
+                "type": "message", "channel": "C123", "channel_type": "channel",
+                "user": "U123", "ts": "1700", "text": "channel",
+            }}
+        ))
+        event = connector.poll()[0]
+        connector.send(OutboundMessage("C123", "reply", metadata=event.metadata))
+
+        self.assertEqual(posts, [{"channel": "C123", "text": "reply", "thread_ts": "1700"}])
+
+
+class WhatsAppConnectorTestCase(unittest.TestCase):
+    def test_verifies_normalizes_signed_webhook_and_sends_text(self) -> None:
+        from allpath_agent.connectors import WhatsAppConnector
+
+        calls = []
+
+        def transport(url, token, payload, timeout):
+            calls.append((url, token, payload, timeout))
+            if payload is None:
+                return {"verified_name": "Allpath", "display_phone_number": "+15551234567"}
+            return {"messages": [{"id": "outbound-1"}]}
+
+        connector = WhatsAppConnector(
+            "access-token", "phone-id", "app-secret", "verify-token", transport=transport
+        )
+        status = connector.status()
+        body = json.dumps({"entry": [{"changes": [{"value": {"messages": [{
+            "from": "15550001111", "id": "wamid.1", "timestamp": "1700000000",
+            "type": "text", "text": {"body": " hello whatsapp "},
+        }]}}]}]}).encode()
+        signature = "sha256=" + hmac.new(b"app-secret", body, hashlib.sha256).hexdigest()
+
+        self.assertEqual(connector.ingest(body, signature), 1)
+        event = connector.poll()[0]
+        connector.send(OutboundMessage(event.conversation_id, "reply"))
+
+        self.assertTrue(status.connected)
+        self.assertEqual(status.detail, "Allpath / +15551234567")
+        self.assertEqual(event.text, "hello whatsapp")
+        self.assertEqual(event.conversation_id, "15550001111")
+        self.assertEqual(calls[1][2]["text"]["body"], "reply")
+        self.assertNotIn("access-token", repr(calls[1][2]))
+
+    def test_rejects_invalid_webhook_signature(self) -> None:
+        from allpath_agent.connectors import WhatsAppConnector
+
+        connector = WhatsAppConnector("token", "phone", "secret", "verify", transport=lambda *args: {})
+        with self.assertRaisesRegex(ValueError, "signature"):
+            connector.ingest(b"{}", "sha256=invalid")
 
 
 if __name__ == "__main__":

@@ -6,6 +6,8 @@ The format follows Keep a Changelog conventions. During development, changes acc
 
 ## Unreleased
 
+## [0.1.0] - 2026-07-15
+
 ### Added
 
 - Established Allpath Agent as an independent project from Hermes Agent.

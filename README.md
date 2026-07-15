@@ -1,5 +1,7 @@
 # Allpath Agent
 
+Latest release: [v0.1.0](release_notes/v0.1.0.md)
+
 [![CI](https://github.com/dukesky/allpath-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/dukesky/allpath-agent/actions/workflows/ci.yml)
 
 Allpath Agent is a small personal AI agent that runs locally, learns its user's preferences, progressively teaches its own capabilities, and routes each task to an appropriate model.

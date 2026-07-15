@@ -185,6 +185,35 @@ class RoutingDecisionRepository:
         return dict(row) if row is not None else None
 
 
+class ConnectorSessionRepository:
+    def __init__(self, database: Database):
+        self._database = database
+
+    def bind(self, connector_id: str, conversation_id: str, session_id: str) -> None:
+        if not connector_id or not conversation_id:
+            raise ValueError("connector and conversation IDs cannot be empty")
+        with self._database.connect() as connection, connection:
+            connection.execute(
+                """
+                INSERT INTO connector_sessions(
+                    connector_id, conversation_id, session_id, created_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (connector_id, conversation_id, session_id, utc_now()),
+            )
+
+    def session_for(self, connector_id: str, conversation_id: str) -> str | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT session_id FROM connector_sessions
+                WHERE connector_id = ? AND conversation_id = ?
+                """,
+                (connector_id, conversation_id),
+            ).fetchone()
+        return row["session_id"] if row is not None else None
+
+
 class MemoryRepository:
     def __init__(self, database: Database):
         self._database = database

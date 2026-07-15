@@ -31,7 +31,7 @@ class StorageTestCase(unittest.TestCase):
             versions = connection.execute(
                 "SELECT version FROM schema_migrations ORDER BY version"
             ).fetchall()
-        self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5])
+        self.assertEqual([row["version"] for row in versions], [1, 2, 3, 4, 5, 6])
 
     def test_session_messages_and_routing_are_persisted(self) -> None:
         sessions = SessionRepository(self.database)

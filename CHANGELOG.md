@@ -9,6 +9,9 @@ The format follows Keep a Changelog conventions. During development, changes acc
 ### Added
 
 - Established Allpath Agent as an independent project from Hermes Agent.
+- Added provider-neutral messaging connector contracts, registry, and runtime dispatch.
+- Added persistent connector-conversation to Allpath-session bindings in SQLite.
+- Added a Telegram reference adapter with health verification, update normalization, offset tracking, replies, injected test transport, and standard-library HTTPS transport.
 - Added the initial product design for conversation-first onboarding and progressive capability discovery.
 - Added the initial single-process architecture and package boundaries.
 - Added a model router with hard requirement filtering and complexity-based selection.

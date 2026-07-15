@@ -3,6 +3,7 @@ from .records import CapabilityProgressRecord, MemoryRecord, MessageRecord, Sess
 from .repositories import (
     CapabilityProgressRepository,
     CapabilitySuggestionRepository,
+    ConnectorSessionRepository,
     CurriculumSessionRepository,
     MemoryRepository,
     MessageRepository,
@@ -17,6 +18,7 @@ __all__ = [
     "CapabilityProgressRecord",
     "CapabilityProgressRepository",
     "CapabilitySuggestionRepository",
+    "ConnectorSessionRepository",
     "CurriculumSessionRepository",
     "Database",
     "MemoryRecord",

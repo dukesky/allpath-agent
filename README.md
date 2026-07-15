@@ -123,6 +123,12 @@ The first locally runnable MVP includes:
 
 The MVP intentionally excludes Slack, WhatsApp, subagents, browser automation, a desktop application, and hosted multi-user infrastructure. Those come after the local core is reliable.
 
+The first messaging milestone is now underway: connector contracts, registry,
+runtime dispatch, persistent platform-conversation session mapping, and a
+transport-injected Telegram reference adapter are implemented. Conversational
+Telegram setup and the managed gateway runner remain the next step, so the
+product does not yet present Telegram as a ready user-facing connection.
+
 ## Architecture
 
 ```text
@@ -313,6 +319,7 @@ Set model prices from the provider's current pricing page before enabling a nonz
 - [Architecture](docs/ARCHITECTURE.md)
 - [Installation](docs/INSTALLATION.md)
 - [Model providers and authentication](docs/PROVIDERS.md)
+- [Connector architecture](docs/CONNECTORS.md)
 - [Conversational model setup](docs/CONVERSATIONAL_MODEL_SETUP.md)
 - [Task budgets and structured logs](docs/BUDGETS_AND_LOGS.md)
 - [Failure recovery](docs/FAILURE_RECOVERY.md)

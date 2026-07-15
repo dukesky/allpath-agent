@@ -142,6 +142,21 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             "ALTER TABLE routing_decisions ADD COLUMN provider TEXT NOT NULL DEFAULT 'default'",
         ),
     ),
+    (
+        6,
+        (
+            """
+            CREATE TABLE connector_sessions (
+                connector_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(connector_id, conversation_id),
+                UNIQUE(session_id)
+            )
+            """,
+        ),
+    ),
 )
 
 

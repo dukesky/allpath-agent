@@ -5,6 +5,7 @@ from .provider_connection import (
     remove_model_role,
     verify_provider_connection,
 )
+from .telegram_connection import TelegramConnectionWorkflow, verify_telegram_token
 
 __all__ = [
     "ConnectionFlowResult",
@@ -12,4 +13,6 @@ __all__ = [
     "reassign_model_role",
     "remove_model_role",
     "verify_provider_connection",
+    "TelegramConnectionWorkflow",
+    "verify_telegram_token",
 ]

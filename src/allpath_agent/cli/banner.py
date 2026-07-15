@@ -28,6 +28,7 @@ def launch_lines(
     live_mode: bool,
     session_id: str,
     configured_roles: Iterable[str] = (),
+    configured_connectors: Iterable[str] = (),
     capability_progress: Iterable[tuple[str, str, str]] = (),
 ) -> tuple[str, ...]:
     roles = tuple(configured_roles)
@@ -55,6 +56,9 @@ def launch_lines(
     role_text = ", ".join(roles) if roles else "none"
     lines.append(f"  Models ready: {role_text}")
     lines.append("  Inspect: /model  ·  Manage: /models  ·  Help: /help")
+    if "telegram" not in set(configured_connectors):
+        lines.append("  Next: connect Telegram")
+        return tuple(lines)
     learned = {capability_id: status for capability_id, _, status in capability_progress}
     next_hint = next(
         (

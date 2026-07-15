@@ -214,6 +214,44 @@ class ConnectorSessionRepository:
         return row["session_id"] if row is not None else None
 
 
+class ConnectorConfigRepository:
+    def __init__(self, database: Database):
+        self._database = database
+
+    def save(self, connector_id: str, status: str, detail: str) -> None:
+        if status not in {"active", "disabled", "error"}:
+            raise ValueError(f"invalid connector status: {status}")
+        now = utc_now()
+        with self._database.connect() as connection, connection:
+            connection.execute(
+                """
+                INSERT INTO connector_configs(
+                    connector_id, status, detail, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(connector_id) DO UPDATE SET
+                    status = excluded.status,
+                    detail = excluded.detail,
+                    updated_at = excluded.updated_at
+                """,
+                (connector_id, status, detail, now, now),
+            )
+
+    def get(self, connector_id: str) -> dict[str, Any] | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM connector_configs WHERE connector_id = ?",
+                (connector_id,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def list_all(self) -> list[dict[str, Any]]:
+        with self._database.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM connector_configs ORDER BY connector_id"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+
 class MemoryRepository:
     def __init__(self, database: Database):
         self._database = database

@@ -123,11 +123,11 @@ The first locally runnable MVP includes:
 
 The MVP intentionally excludes Slack, WhatsApp, subagents, browser automation, a desktop application, and hosted multi-user infrastructure. Those come after the local core is reliable.
 
-The first messaging milestone is now underway: connector contracts, registry,
-runtime dispatch, persistent platform-conversation session mapping, and a
-transport-injected Telegram reference adapter are implemented. Conversational
-Telegram setup and the managed gateway runner remain the next step, so the
-product does not yet present Telegram as a ready user-facing connection.
+The first messaging milestone is available: connector contracts, registry,
+runtime dispatch, persistent platform-conversation session mapping, Telegram
+setup with BotFather guidance and hidden token verification, and a foreground
+gateway runner are implemented. Connect a model first, say `connect Telegram`,
+then run `allpath-agent gateway` to receive and answer Telegram messages.
 
 ## Architecture
 

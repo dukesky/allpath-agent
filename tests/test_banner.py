@@ -26,6 +26,7 @@ class LaunchBannerTestCase(unittest.TestCase):
                 live_mode=True,
                 session_id="session-456",
                 configured_roles=("fast", "advanced"),
+                configured_connectors=("telegram",),
                 capability_progress=(
                     ("durable_memory", "Durable memory", "habitual"),
                     ("current_time", "Current time", "unseen"),
@@ -37,6 +38,18 @@ class LaunchBannerTestCase(unittest.TestCase):
         self.assertIn("Models ready: fast, advanced", text)
         self.assertIn("/model", text)
         self.assertIn("what time is it", text)
+        self.assertNotIn("remember that I prefer", text)
+
+    def test_live_banner_prioritizes_telegram_before_advanced_lessons(self) -> None:
+        text = "\n".join(
+            launch_lines(
+                live_mode=True,
+                session_id="session-789",
+                configured_roles=("standard",),
+            )
+        )
+
+        self.assertIn("Next: connect Telegram", text)
         self.assertNotIn("remember that I prefer", text)
 
 

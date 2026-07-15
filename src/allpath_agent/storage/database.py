@@ -157,6 +157,20 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             """,
         ),
     ),
+    (
+        7,
+        (
+            """
+            CREATE TABLE connector_configs (
+                connector_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL CHECK(status IN ('active', 'disabled', 'error')),
+                detail TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """,
+        ),
+    ),
 )
 
 

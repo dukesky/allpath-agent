@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from allpath_agent.cli.main import _chat, _run_connection_selectors
+from allpath_agent.cli.main import _chat, _run_connection_selectors, _run_gateway
 from allpath_agent.config import load_config
 from allpath_agent.storage import (
     CapabilityProgressRepository,
@@ -19,6 +19,7 @@ from allpath_agent.storage import (
     MessageRepository,
     SessionRepository,
     WorkflowRunRepository,
+    ConnectorConfigRepository,
 )
 from allpath_agent.secrets import SecretStore
 from allpath_agent.workflows import ProviderConnectionWorkflow
@@ -350,6 +351,38 @@ class CliInterruptTestCase(unittest.TestCase):
 
         self.assertEqual(selection_count, 3)
         self.assertIn("verification failed", result.messages[0].lower())
+
+    def test_gateway_once_uses_active_telegram_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            database = Database(home / "state.db")
+            database.initialize()
+            ConnectorConfigRepository(database).save("telegram", "active", "@test_bot")
+            SecretStore(home / "secrets.json").set("TELEGRAM_BOT_TOKEN", "test-token")
+            outputs = []
+
+            class FakeTelegram:
+                id = "telegram"
+
+                def status(self):
+                    from allpath_agent.connectors import ConnectorStatus
+
+                    return ConnectorStatus("telegram", True, "@test_bot")
+
+                def poll(self):
+                    return ()
+
+                def send(self, message):
+                    raise AssertionError("no message should be sent")
+
+            with patch("allpath_agent.cli.main.TelegramConnector", return_value=FakeTelegram()), patch(
+                "allpath_agent.cli.main._build_application",
+                return_value=object(),
+            ):
+                result = _run_gateway(home, database, True, 0, outputs.append, outputs.append)
+
+        self.assertEqual(result, 0)
+        self.assertTrue(any("@test_bot" in message for message in outputs))
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import sys
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from allpath_agent.agent import AgentLoop, BudgetExceededError, IterationLimitEr
 from allpath_agent.application import AgentApplication, demo_profiles
 from allpath_agent.config import AppConfig, ConfigError, load_config, resolve_home, write_default_config
 from allpath_agent.curriculum import CurriculumEngine, CurriculumService, default_capabilities
+from allpath_agent.connectors import ConnectorRegistry, ConnectorRuntime, TelegramConnector
 from allpath_agent.models import DemoProvider, ModelRouter, ProviderError, ProviderPool
 from allpath_agent.observability import JsonlEventLogger
 from allpath_agent.provider_runtime import (
@@ -21,6 +23,8 @@ from allpath_agent.secrets import SecretStore
 from allpath_agent.storage import (
     CapabilityProgressRepository,
     CapabilitySuggestionRepository,
+    ConnectorConfigRepository,
+    ConnectorSessionRepository,
     CurriculumSessionRepository,
     Database,
     MemoryRepository,
@@ -34,6 +38,7 @@ from allpath_agent.storage import (
 from allpath_agent.tools import ToolRuntime, create_builtin_registry
 from allpath_agent.workflows import (
     ProviderConnectionWorkflow,
+    TelegramConnectionWorkflow,
     reassign_model_role,
     remove_model_role,
     verify_provider_connection,
@@ -59,6 +64,10 @@ def build_parser() -> argparse.ArgumentParser:
     sessions = subparsers.add_parser("sessions", help="List recent sessions")
     sessions.add_argument("--limit", type=int, default=20)
     subparsers.add_parser("providers", help="Show configured model providers and auth status")
+    subparsers.add_parser("connectors", help="Show messaging connector status")
+    gateway = subparsers.add_parser("gateway", help="Run configured messaging connectors")
+    gateway.add_argument("--once", action="store_true", help="Poll once and exit")
+    gateway.add_argument("--poll-interval", type=float, default=1.0)
     return parser
 
 
@@ -77,6 +86,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         database = Database(home / "state.db")
         database.initialize()
+        if args.command == "connectors":
+            return _show_connectors(ConnectorConfigRepository(database), print)
+        if args.command == "gateway":
+            return _run_gateway(home, database, args.once, args.poll_interval, print, _stderr)
         if args.command == "sessions":
             return _list_sessions(SessionRepository(database), args.limit, print)
         starter_mode = not (home / "config.toml").is_file()
@@ -134,18 +147,30 @@ def _chat(
         WorkflowRunRepository(database),
         SecretStore(home / "secrets.json"),
     )
+    telegram_workflow = TelegramConnectionWorkflow(
+        WorkflowRunRepository(database),
+        SecretStore(home / "secrets.json"),
+        ConnectorConfigRepository(database),
+    )
     hidden_input = secret_input_fn or getpass.getpass
     application.start_session(session.id)
     if requested_session_id:
         application.record_capability_success("session_management")
     live_mode = not demo
     configured_roles = ()
+    configured_connectors = ()
     if live_mode:
         configured_roles = tuple(profile.name for profile in load_config(home / "config.toml").models)
+        configured_connectors = tuple(
+            record["connector_id"]
+            for record in ConnectorConfigRepository(database).list_all()
+            if record["status"] == "active"
+        )
     for line in launch_lines(
         live_mode=live_mode,
         session_id=session.id,
         configured_roles=configured_roles,
+        configured_connectors=configured_connectors,
         capability_progress=application.capability_progress(),
     ):
         output(line)
@@ -178,7 +203,8 @@ def _chat(
         if user_message == "/help":
             output(
                 "Commands: /help, /new, /sessions, /resume <session-id>, "
-                "/model, /models, /route, /capabilities, /dismiss [capability-id], /exit"
+                "/model, /models, /route, /connectors, /capabilities, "
+                "/dismiss [capability-id], /exit"
             )
             continue
         if user_message.startswith("/help "):
@@ -210,6 +236,9 @@ def _chat(
             continue
         if user_message == "/route":
             _show_latest_route(RoutingDecisionRepository(database), active_session_id, output)
+            continue
+        if user_message == "/connectors":
+            _show_connectors(ConnectorConfigRepository(database), output)
             continue
         if user_message in {"/model", "/models current"}:
             _show_current_model(home, database, active_session_id, output)
@@ -267,6 +296,25 @@ def _chat(
                 output("Capability suggestion dismissed.")
             else:
                 error_output("No capability suggestion found to dismiss.")
+            continue
+
+        if _requests_telegram_setup(user_message) and not (home / "config.toml").is_file():
+            output("Agent [setup]> Connect a reasoning model first, then connect Telegram.")
+            continue
+        telegram_result = telegram_workflow.handle(active_session_id, user_message)
+        if telegram_result.handled:
+            for message in telegram_result.messages:
+                output(f"Agent [setup]> {message}")
+            if telegram_result.request_secret:
+                try:
+                    token = hidden_input("Telegram bot token (hidden)> ")
+                except (EOFError, KeyboardInterrupt):
+                    output("")
+                    error_output("Secret input cancelled. Telegram setup is still resumable.")
+                    continue
+                telegram_result = telegram_workflow.submit_secret(active_session_id, token)
+                for message in telegram_result.messages:
+                    output(f"Agent [setup]> {message}")
             continue
 
         connection_result = connection_workflow.handle(
@@ -401,6 +449,7 @@ def _build_application(
     demo: bool,
     input_fn: Callable[[str], str],
     output: Output,
+    interactive_approvals: bool = True,
 ) -> AgentApplication:
     if demo:
         provider = ProviderPool.single(DemoProvider())
@@ -435,7 +484,7 @@ def _build_application(
     runtime = ToolRuntime(
         create_builtin_registry(memories),
         approvals,
-        TerminalApprovalHandler(input_fn, output),
+        TerminalApprovalHandler(input_fn, output) if interactive_approvals else None,
     )
     loop = AgentLoop(
         provider,
@@ -501,6 +550,76 @@ def _show_providers(
         )
     output(f"Built-in provider types: {', '.join(available_provider_ids())}")
     return 0
+
+
+def _show_connectors(configs: ConnectorConfigRepository, output: Output) -> int:
+    records = configs.list_all()
+    if not records:
+        output("No messaging connectors configured. Try: connect Telegram")
+        return 0
+    for record in records:
+        output(f"{record['connector_id']:<12} {record['status']:<9} {record['detail']}")
+    return 0
+
+
+def _requests_telegram_setup(message: str) -> bool:
+    lowered = message.lower()
+    return "telegram" in lowered and any(
+        phrase in lowered for phrase in ("connect", "setup", "set up", "连接", "配置", "设置")
+    )
+
+
+def _run_gateway(
+    home: Path,
+    database: Database,
+    once: bool,
+    poll_interval: float,
+    output: Output,
+    error_output: Output,
+) -> int:
+    if poll_interval < 0:
+        raise ConfigError("gateway poll interval cannot be negative")
+    config = ConnectorConfigRepository(database).get("telegram")
+    if config is None or config["status"] != "active":
+        raise ConfigError("Telegram is not active. Start Allpath and say: connect Telegram")
+    token = SecretStore(home / "secrets.json").values().get("TELEGRAM_BOT_TOKEN")
+    if not token:
+        raise ConfigError("Telegram token is missing; reconnect Telegram")
+    connector = TelegramConnector(token)
+    status = connector.status()
+    if not status.connected:
+        raise ConfigError(f"Telegram verification failed: {status.detail}")
+    application = _build_application(
+        home,
+        database,
+        False,
+        lambda prompt: "",
+        output,
+        interactive_approvals=False,
+    )
+    runtime = ConnectorRuntime(
+        application,
+        ConnectorRegistry((connector,)),
+        SessionRepository(database),
+        ConnectorSessionRepository(database),
+    )
+    output(f"Allpath gateway running: Telegram {status.detail}")
+    output("Side-effecting tools are denied unless a channel-safe approval flow is added.")
+    try:
+        while True:
+            processed = runtime.poll_once("telegram")
+            if processed:
+                output(f"Telegram: processed {processed} message(s)")
+            if once:
+                return 0
+            time.sleep(poll_interval)
+    except KeyboardInterrupt:
+        output("")
+        output("Gateway stopped. Session mappings are saved.")
+        return 130
+    except Exception as error:
+        error_output(f"Gateway error: {type(error).__name__}: {str(error)[:240]}")
+        return 1
 
 
 def _show_models(config: AppConfig, output: Output) -> None:

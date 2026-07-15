@@ -35,10 +35,24 @@ process restarts. Platform credentials do not belong in this table.
 - injected transport for deterministic offline tests;
 - a standard-library HTTPS JSON transport for the future live runner.
 
-The current milestone is the connector foundation. Conversational bot-token
-setup, a managed long-running gateway command, retry/backoff, and process
-supervision are intentionally the next step. Until those ship, the CLI must not
-claim that Telegram is connected or ready for daily use.
+Conversational bot-token setup and a foreground gateway runner are implemented.
+Say `connect Telegram` after connecting a model, follow the BotFather guidance,
+and enter the token through hidden input. Allpath verifies the bot with `getMe`
+before storing the token and marking Telegram active.
+
+Run:
+
+```bash
+allpath-agent connectors
+allpath-agent gateway
+```
+
+`gateway` verifies the active bot, long-polls Telegram, preserves one Allpath
+session per Telegram conversation, and replies through the same chat. Run
+`allpath-agent gateway --once` for a one-cycle health/integration check.
+
+The gateway is currently a foreground process. Background service installation,
+bounded polling retry/backoff, and process supervision remain the next step.
 
 ## Safety boundaries
 
@@ -52,9 +66,7 @@ claim that Telegram is connected or ready for daily use.
 
 ## Next implementation
 
-1. Add a resumable “connect Telegram” conversation workflow.
-2. Store the bot token in the existing mode-`0600` secret store.
-3. Verify with `getMe` before activation.
-4. Add a foreground `allpath-agent gateway` runner with graceful shutdown.
-5. Add bounded polling retries and privacy-safe connector lifecycle logs.
-6. Advance startup onboarding to Telegram only after model setup is complete.
+1. Add bounded polling retries and privacy-safe connector lifecycle logs.
+2. Add background service installation and process supervision.
+3. Add Telegram disconnect/rotate-token management.
+4. Build the Slack adapter against the same contracts.

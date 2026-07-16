@@ -23,6 +23,12 @@ class SlackConnectionWorkflowTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
 
+    def advance_to_tokens(self, workflow: SlackConnectionWorkflow):
+        result = None
+        for _ in range(7):
+            result = workflow.handle(self.session.id, "继续")
+        return result
+
     def test_two_hidden_tokens_are_verified_and_never_persisted_in_workflow_state(self) -> None:
         captured = []
         workflow = SlackConnectionWorkflow(
@@ -33,11 +39,15 @@ class SlackConnectionWorkflowTestCase(unittest.TestCase):
         )
 
         started = workflow.handle(self.session.id, "connect Slack")
+        token_request = self.advance_to_tokens(workflow)
         next_secret = workflow.submit_secret(self.session.id, "xoxb-private")
         completed = workflow.submit_secret(self.session.id, "xapp-private")
 
-        self.assertTrue(started.request_secret)
-        self.assertIn("Socket Mode", started.messages[0])
+        self.assertFalse(started.request_secret)
+        self.assertIn("[1/7]", started.messages[0])
+        self.assertIn("Create New App", started.messages[0])
+        self.assertTrue(token_request.request_secret)
+        self.assertIn("xoxb-", token_request.messages[0])
         self.assertTrue(next_secret.request_secret)
         self.assertTrue(completed.completed)
         self.assertEqual(captured, [("xoxb-private", "xapp-private")])
@@ -57,6 +67,7 @@ class SlackConnectionWorkflowTestCase(unittest.TestCase):
     def test_restart_requires_bot_token_again(self) -> None:
         workflow = SlackConnectionWorkflow(self.runs, self.secrets, self.configs, verifier=lambda bot, app: "ok")
         workflow.handle(self.session.id, "connect Slack")
+        self.advance_to_tokens(workflow)
         workflow.submit_secret(self.session.id, "xoxb-private")
 
         resumed = SlackConnectionWorkflow(self.runs, self.secrets, self.configs, verifier=lambda bot, app: "ok")
@@ -65,6 +76,50 @@ class SlackConnectionWorkflowTestCase(unittest.TestCase):
         self.assertTrue(result.request_secret)
         self.assertIn("Bot Token again", result.messages[0])
         self.assertEqual(self.secrets.values(), {})
+
+    def test_progress_back_status_and_restart_resume_the_same_step(self) -> None:
+        workflow = SlackConnectionWorkflow(
+            self.runs,
+            self.secrets,
+            self.configs,
+            verifier=lambda bot, app: "ok",
+        )
+
+        first = workflow.handle(self.session.id, "连接 Slack")
+        second = workflow.handle(self.session.id, "继续")
+        status = workflow.handle(self.session.id, "状态")
+        back = workflow.handle(self.session.id, "返回")
+        workflow.handle(self.session.id, "继续")
+
+        resumed = SlackConnectionWorkflow(
+            self.runs,
+            self.secrets,
+            self.configs,
+            verifier=lambda bot, app: "ok",
+        )
+        resumed_status = resumed.handle(self.session.id, "状态")
+
+        self.assertIn("[1/7]", first.messages[0])
+        self.assertIn("[2/7]", second.messages[0])
+        self.assertIn("`chat:write`", status.messages[0])
+        self.assertIn("[1/7]", back.messages[0])
+        self.assertIn("[2/7]", resumed_status.messages[0])
+        self.assertIn("Slack 设置 2/7", resumed.input_hint(self.session.id))
+
+    def test_unrelated_text_does_not_advance_setup(self) -> None:
+        workflow = SlackConnectionWorkflow(
+            self.runs,
+            self.secrets,
+            self.configs,
+            verifier=lambda bot, app: "ok",
+        )
+        workflow.handle(self.session.id, "connect Slack")
+
+        result = workflow.handle(self.session.id, "I cannot find that button")
+
+        self.assertFalse(result.request_secret)
+        self.assertIn("type “continue”", result.messages[0])
+        self.assertIn("1/7", workflow.input_hint(self.session.id))
 
 
 if __name__ == "__main__":

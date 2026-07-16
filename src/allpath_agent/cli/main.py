@@ -197,6 +197,8 @@ def _chat(
     while True:
         try:
             input_hint = connection_workflow.input_hint(active_session_id)
+            if input_hint is None:
+                input_hint = slack_workflow.input_hint(active_session_id)
             if input_hint is None and not live_mode:
                 input_hint = "Try: 连接模型 · what can you do · calculate 18 * 7"
             prompt = f"You>  ({input_hint})\n> " if input_hint else "You> "

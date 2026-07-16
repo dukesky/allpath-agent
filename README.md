@@ -138,6 +138,12 @@ through hidden inputs. Direct-message replies stay in the main conversation;
 existing threads remain threaded, while channel replies start a thread to avoid
 channel noise.
 
+Slack setup is a seven-step resumable tutorial. It identifies the exact Slack
+settings pages, buttons, bot scopes, event subscription, Socket Mode permission,
+installation step, and token locations. Type `continue`, `back`, `status`, or
+`cancel` during the tutorial. The current step is stored in SQLite, but tokens
+are never written into workflow state or conversation history.
+
 WhatsApp is supported through Meta's official Cloud API. Say `connect WhatsApp`
 and provide the Access Token, Phone Number ID, App Secret, and a verify token
 through hidden inputs. Then run `allpath-agent gateway`, expose local port

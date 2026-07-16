@@ -6,6 +6,11 @@ The format follows Keep a Changelog conventions. During development, changes acc
 
 ## Unreleased
 
+### Added
+
+- Added a reusable connector-onboarding guide engine with numbered steps, bilingual instructions, progress hints, back/status/cancel navigation, and persistent resume points.
+- Replaced Slack's one-paragraph setup prompt with a seven-step conversational tutorial covering app creation, bot scopes, App Home, events, Socket Mode, installation, and secure token collection.
+
 ## [0.1.0] - 2026-07-15
 
 ### Added

@@ -171,6 +171,53 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             """,
         ),
     ),
+    (
+        8,
+        (
+            """
+            CREATE TABLE automation_jobs (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                schedule_kind TEXT NOT NULL CHECK(schedule_kind IN ('once', 'cron')),
+                schedule_expression TEXT NOT NULL,
+                timezone TEXT NOT NULL,
+                session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id) ON DELETE CASCADE,
+                model_role TEXT NOT NULL CHECK(model_role IN ('auto', 'fast', 'standard', 'advanced')),
+                destination_connector_id TEXT,
+                destination_conversation_id TEXT,
+                enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+                next_run_at TEXT,
+                last_run_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                CHECK (
+                    (destination_connector_id IS NULL AND destination_conversation_id IS NULL)
+                    OR
+                    (destination_connector_id IS NOT NULL AND destination_conversation_id IS NOT NULL)
+                )
+            )
+            """,
+            "CREATE INDEX automation_jobs_due ON automation_jobs(enabled, next_run_at)",
+            """
+            CREATE TABLE automation_runs (
+                id TEXT PRIMARY KEY,
+                job_id TEXT NOT NULL REFERENCES automation_jobs(id) ON DELETE CASCADE,
+                task_id TEXT,
+                status TEXT NOT NULL CHECK(status IN ('claimed', 'running', 'succeeded', 'failed', 'interrupted')),
+                scheduled_for TEXT NOT NULL,
+                started_at TEXT,
+                completed_at TEXT,
+                output_text TEXT,
+                error_type TEXT,
+                error_message TEXT,
+                output_message_id TEXT,
+                UNIQUE(job_id, scheduled_for)
+            )
+            """,
+            "CREATE INDEX automation_runs_job_scheduled ON automation_runs(job_id, scheduled_for)",
+        ),
+    ),
 )
 
 

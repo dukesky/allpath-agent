@@ -15,6 +15,7 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added `allpath-agent connectors --test` and `/connectors test` diagnostics for credential presence, live verification, runtime readiness, WhatsApp webhook reachability, and corrective actions.
 - Added idempotent per-user background gateway service commands for macOS LaunchAgents and Linux user systemd, with safe status, restart, uninstall, and credential-free service files.
 - Added the implementation-ready minimal automation design covering SQLite jobs and runs, schedule semantics, execution invariants, safe connector delivery, CLI surfaces, and deferred scope.
+- Added Automation MVP persistence, timezone-aware one-time and five-field cron schedules, atomic due-run claims, run-now/tick execution through the existing AgentApplication, local result/error retention, and CLI lifecycle management.
 
 ## [0.1.0] - 2026-07-15
 

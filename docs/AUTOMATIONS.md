@@ -89,7 +89,8 @@ destination and ask for confirmation.
 - a run has one terminal transition;
 - retries create explicit attempts and never duplicate an already delivered
   connector message;
-- one-time jobs disable after successful execution;
+- one-time jobs disable after their first terminal execution; failed output is
+  retained and can be retried explicitly with `run`;
 - recurring jobs calculate the next run in the configured timezone;
 - missed runs coalesce to one execution by default instead of replaying an
   unbounded backlog;
@@ -114,6 +115,27 @@ the generated answer for inspection; it does not silently discard work.
 5. CLI commands and conversational confirmation workflow.
 6. Background runner integration and connector delivery.
 7. Real-timezone, interruption, duplicate-claim, and restart tests.
+
+## Implemented MVP slice
+
+The first executable slice now includes migrations 8, persistent jobs and runs,
+five-field cron parsing, timezone-aware one-time schedules, atomic due-job
+claims, run-now/tick execution through the existing `AgentApplication`, local
+output/error retention, and terminal CLI management.
+
+```bash
+allpath-agent automations list
+allpath-agent automations add-once --name "Reminder" --prompt "Remind me to send the proposal" --at "2026-08-01T09:00" --timezone America/Los_Angeles
+allpath-agent automations add-cron --name "Daily plan" --prompt "Prepare my daily plan" --cron "0 8 * * 1-5" --timezone America/Los_Angeles
+allpath-agent automations run <job-id>
+allpath-agent automations tick
+allpath-agent automations enable <job-id>
+allpath-agent automations disable <job-id>
+allpath-agent automations delete <job-id>
+```
+
+This slice stores results locally. Conversational creation, automatic runner
+service integration, and connector delivery remain subsequent slices.
 
 ## Explicitly deferred
 

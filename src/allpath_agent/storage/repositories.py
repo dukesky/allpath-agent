@@ -606,3 +606,236 @@ def _workflow_record(row: Any) -> dict[str, Any]:
     record = dict(row)
     record["state"] = json.loads(record.pop("state_json"))
     return record
+
+
+class AutomationJobRepository:
+    def __init__(self, database: Database):
+        self._database = database
+
+    def create(
+        self,
+        *,
+        name: str,
+        prompt: str,
+        schedule_kind: str,
+        schedule_expression: str,
+        timezone: str,
+        session_id: str,
+        next_run_at: str,
+        model_role: str = "auto",
+        destination_connector_id: str | None = None,
+        destination_conversation_id: str | None = None,
+    ) -> dict[str, Any]:
+        if schedule_kind not in {"once", "cron"}:
+            raise ValueError("automation schedule kind must be once or cron")
+        if model_role not in {"auto", "fast", "standard", "advanced"}:
+            raise ValueError("invalid automation model role")
+        if not name.strip() or not prompt.strip():
+            raise ValueError("automation name and prompt cannot be empty")
+        if (destination_connector_id is None) != (destination_conversation_id is None):
+            raise ValueError("automation destination requires both connector and conversation IDs")
+        job_id = str(uuid4())
+        now = utc_now()
+        with self._database.connect() as connection, connection:
+            connection.execute(
+                """
+                INSERT INTO automation_jobs(
+                    id, name, prompt, schedule_kind, schedule_expression,
+                    timezone, session_id, model_role, destination_connector_id,
+                    destination_conversation_id, enabled, next_run_at,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    name.strip(),
+                    prompt.strip(),
+                    schedule_kind,
+                    schedule_expression,
+                    timezone,
+                    session_id,
+                    model_role,
+                    destination_connector_id,
+                    destination_conversation_id,
+                    next_run_at,
+                    now,
+                    now,
+                ),
+            )
+        return self.get(job_id)
+
+    def get(self, job_id: str) -> dict[str, Any] | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM automation_jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+        return _automation_job_record(row) if row else None
+
+    def list_all(self) -> list[dict[str, Any]]:
+        with self._database.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM automation_jobs ORDER BY created_at, id"
+            ).fetchall()
+        return [_automation_job_record(row) for row in rows]
+
+    def set_enabled(self, job_id: str, enabled: bool) -> dict[str, Any]:
+        with self._database.connect() as connection, connection:
+            if enabled:
+                row = connection.execute(
+                    "SELECT next_run_at FROM automation_jobs WHERE id = ?", (job_id,)
+                ).fetchone()
+                if row is None:
+                    raise ValueError(f"automation job does not exist: {job_id}")
+                if row["next_run_at"] is None:
+                    raise ValueError("automation has no future run to enable")
+            cursor = connection.execute(
+                "UPDATE automation_jobs SET enabled = ?, updated_at = ? WHERE id = ?",
+                (int(enabled), utc_now(), job_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(f"automation job does not exist: {job_id}")
+        return self.get(job_id)
+
+    def complete_schedule(
+        self,
+        job_id: str,
+        *,
+        last_run_at: str,
+        next_run_at: str | None,
+        disable: bool,
+    ) -> None:
+        with self._database.connect() as connection, connection:
+            cursor = connection.execute(
+                """
+                UPDATE automation_jobs
+                SET last_run_at = ?, next_run_at = ?, enabled = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (last_run_at, next_run_at, int(not disable), utc_now(), job_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(f"automation job does not exist: {job_id}")
+
+    def delete(self, job_id: str) -> bool:
+        with self._database.connect() as connection, connection:
+            cursor = connection.execute("DELETE FROM automation_jobs WHERE id = ?", (job_id,))
+        return cursor.rowcount == 1
+
+
+class AutomationRunRepository:
+    def __init__(self, database: Database):
+        self._database = database
+
+    def claim_due(self, now: str) -> dict[str, Any] | None:
+        with self._database.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT jobs.* FROM automation_jobs AS jobs
+                WHERE jobs.enabled = 1
+                  AND jobs.next_run_at IS NOT NULL
+                  AND jobs.next_run_at <= ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM automation_runs AS runs
+                      WHERE runs.job_id = jobs.id
+                        AND runs.scheduled_for = jobs.next_run_at
+                  )
+                ORDER BY jobs.next_run_at, jobs.created_at
+                LIMIT 1
+                """,
+                (now,),
+            ).fetchone()
+            if row is None:
+                connection.rollback()
+                return None
+            run_id = str(uuid4())
+            connection.execute(
+                """
+                INSERT INTO automation_runs(id, job_id, status, scheduled_for)
+                VALUES (?, ?, 'claimed', ?)
+                """,
+                (run_id, row["id"], row["next_run_at"]),
+            )
+            connection.commit()
+        return {"run": self.get(run_id), "job": _automation_job_record(row)}
+
+    def claim_now(self, job_id: str, scheduled_for: str) -> dict[str, Any]:
+        run_id = str(uuid4())
+        with self._database.connect() as connection, connection:
+            connection.execute(
+                """
+                INSERT INTO automation_runs(id, job_id, status, scheduled_for)
+                VALUES (?, ?, 'claimed', ?)
+                """,
+                (run_id, job_id, scheduled_for),
+            )
+        return self.get(run_id)
+
+    def start(self, run_id: str, task_id: str | None = None) -> dict[str, Any]:
+        with self._database.connect() as connection, connection:
+            cursor = connection.execute(
+                """
+                UPDATE automation_runs
+                SET status = 'running', task_id = ?, started_at = ?
+                WHERE id = ? AND status = 'claimed'
+                """,
+                (task_id, utc_now(), run_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("automation run is missing or already started")
+        return self.get(run_id)
+
+    def finish(
+        self,
+        run_id: str,
+        status: str,
+        *,
+        task_id: str | None = None,
+        output_text: str | None = None,
+        error_type: str | None = None,
+        error_message: str | None = None,
+    ) -> dict[str, Any]:
+        if status not in {"succeeded", "failed", "interrupted"}:
+            raise ValueError("invalid automation run terminal status")
+        with self._database.connect() as connection, connection:
+            cursor = connection.execute(
+                """
+                UPDATE automation_runs
+                SET status = ?, task_id = COALESCE(?, task_id), completed_at = ?,
+                    output_text = ?, error_type = ?, error_message = ?
+                WHERE id = ? AND status = 'running'
+                """,
+                (
+                    status,
+                    task_id,
+                    utc_now(),
+                    output_text,
+                    error_type,
+                    error_message[:240] if error_message else None,
+                    run_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("automation run is missing or already terminal")
+        return self.get(run_id)
+
+    def get(self, run_id: str) -> dict[str, Any] | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM automation_runs WHERE id = ?", (run_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_for_job(self, job_id: str) -> list[dict[str, Any]]:
+        with self._database.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM automation_runs WHERE job_id = ? ORDER BY scheduled_for, id",
+                (job_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def _automation_job_record(row: Any) -> dict[str, Any]:
+    record = dict(row)
+    record["enabled"] = bool(record["enabled"])
+    return record

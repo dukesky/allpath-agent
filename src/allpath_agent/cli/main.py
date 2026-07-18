@@ -9,6 +9,7 @@ from pathlib import Path
 
 from allpath_agent.agent import AgentLoop, BudgetExceededError, IterationLimitError
 from allpath_agent.application import AgentApplication, demo_profiles
+from allpath_agent.automations import AutomationService
 from allpath_agent.config import AppConfig, ConfigError, load_config, resolve_home, write_default_config
 from allpath_agent.curriculum import CurriculumEngine, CurriculumService, default_capabilities
 from allpath_agent.connectors import (
@@ -31,6 +32,8 @@ from allpath_agent.secrets import SecretStore
 from allpath_agent.storage import (
     CapabilityProgressRepository,
     CapabilitySuggestionRepository,
+    AutomationJobRepository,
+    AutomationRunRepository,
     ConnectorConfigRepository,
     ConnectorSessionRepository,
     CurriculumSessionRepository,
@@ -80,6 +83,19 @@ def build_parser() -> argparse.ArgumentParser:
     gateway.add_argument("action", nargs="?", choices=("run", "install", "status", "restart", "uninstall"), default="run")
     gateway.add_argument("--once", action="store_true", help="Poll once and exit")
     gateway.add_argument("--poll-interval", type=float, default=1.0)
+    automations = subparsers.add_parser("automations", help="Manage scheduled agent tasks")
+    automations.add_argument(
+        "action",
+        nargs="?",
+        choices=("list", "add-once", "add-cron", "run", "tick", "enable", "disable", "delete"),
+        default="list",
+    )
+    automations.add_argument("job_id", nargs="?")
+    automations.add_argument("--name")
+    automations.add_argument("--prompt")
+    automations.add_argument("--at", help="ISO date/time for a one-time job")
+    automations.add_argument("--cron", help="Five-field cron expression")
+    automations.add_argument("--timezone", default="UTC", help="IANA timezone")
     return parser
 
 
@@ -106,6 +122,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.action != "run":
                 return _manage_gateway_service(home, args.action, print)
             return _run_gateway(home, database, args.once, args.poll_interval, print, _stderr)
+        if args.command == "automations":
+            return _manage_automations(home, database, args, print)
         if args.command == "sessions":
             return _list_sessions(SessionRepository(database), args.limit, print)
         starter_mode = not (home / "config.toml").is_file()
@@ -236,7 +254,7 @@ def _chat(
             output(
                 "Commands: /help, /new, /sessions, /resume <session-id>, "
                 "/model, /models, /route, /connectors, /capabilities, "
-                "/dismiss [capability-id], /exit"
+                "/automations, /dismiss [capability-id], /exit"
             )
             continue
         if user_message.startswith("/help "):
@@ -274,6 +292,9 @@ def _chat(
                 _test_connectors(home, ConnectorConfigRepository(database), output)
             else:
                 _show_connectors(ConnectorConfigRepository(database), output)
+            continue
+        if user_message == "/automations":
+            _list_automations(AutomationJobRepository(database), output)
             continue
         if user_message in {"/model", "/models current"}:
             _show_current_model(home, database, active_session_id, output)
@@ -767,6 +788,87 @@ def _manage_gateway_service(home: Path, action: str, output: Output) -> int:
     if status.installed:
         output(f"Service file: {manager.service_path}")
         output(f"Logs: {home / 'logs' / 'gateway.out.log'}")
+    return 0
+
+
+def _manage_automations(home: Path, database: Database, args: argparse.Namespace, output: Output) -> int:
+    jobs = AutomationJobRepository(database)
+    runs = AutomationRunRepository(database)
+    sessions = SessionRepository(database)
+    if args.action == "list":
+        return _list_automations(jobs, output)
+    try:
+        if args.action == "add-once":
+            _require_automation_args(args, "name", "prompt", "at")
+            service = AutomationService(jobs, runs, sessions)
+            job = service.create_once(args.name, args.prompt, args.at, args.timezone)
+            output(f"Created one-time automation {job['id']}: {job['name']} next={job['next_run_at']}")
+            return 0
+        if args.action == "add-cron":
+            _require_automation_args(args, "name", "prompt", "cron")
+            service = AutomationService(jobs, runs, sessions)
+            job = service.create_cron(args.name, args.prompt, args.cron, args.timezone)
+            output(f"Created recurring automation {job['id']}: {job['name']} next={job['next_run_at']}")
+            return 0
+        if args.action in {"enable", "disable"}:
+            _require_automation_args(args, "job_id")
+            job = jobs.set_enabled(args.job_id, args.action == "enable")
+            output(f"Automation {job['id']} is {'enabled' if job['enabled'] else 'disabled'}.")
+            return 0
+        if args.action == "delete":
+            _require_automation_args(args, "job_id")
+            if not jobs.delete(args.job_id):
+                raise ValueError(f"automation job does not exist: {args.job_id}")
+            output(f"Deleted automation {args.job_id}.")
+            return 0
+        if not (home / "config.toml").is_file():
+            raise ValueError("connect a live model before executing automations")
+        application = _build_application(
+            home,
+            database,
+            False,
+            lambda prompt: "",
+            output,
+            interactive_approvals=False,
+        )
+        service = AutomationService(jobs, runs, sessions, application)
+        if args.action == "run":
+            _require_automation_args(args, "job_id")
+            run = service.run_now(args.job_id)
+        elif args.action == "tick":
+            run = service.tick()
+            if run is None:
+                output("No automation is due.")
+                return 0
+        else:
+            raise ValueError(f"unknown automation action: {args.action}")
+        output(f"Automation run {run['id']}: {run['status']}")
+        if run["output_text"]:
+            output(run["output_text"])
+        if run["error_message"]:
+            output(f"Error: {run['error_type']}: {run['error_message']}")
+        return 0 if run["status"] == "succeeded" else 1
+    except (ValueError, RuntimeError) as error:
+        raise ConfigError(str(error)) from error
+
+
+def _require_automation_args(args: argparse.Namespace, *names: str) -> None:
+    missing = [name.replace("_", "-") for name in names if not getattr(args, name, None)]
+    if missing:
+        raise ValueError(f"missing automation argument(s): {', '.join(missing)}")
+
+
+def _list_automations(jobs: AutomationJobRepository, output: Output) -> int:
+    records = jobs.list_all()
+    if not records:
+        output("No automations configured.")
+        return 0
+    for job in records:
+        state = "enabled" if job["enabled"] else "disabled"
+        output(
+            f"{job['id']}  {state:<8} {job['schedule_kind']:<4} "
+            f"next={job['next_run_at'] or '-'}  {job['name']}"
+        )
     return 0
 
 

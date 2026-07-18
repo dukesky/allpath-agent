@@ -349,6 +349,8 @@ Set model prices from the provider's current pricing page before enabling a nonz
 - [Installation](docs/INSTALLATION.md)
 - [Model providers and authentication](docs/PROVIDERS.md)
 - [Connector architecture](docs/CONNECTORS.md)
+- [Next phase plan](docs/NEXT_PHASE_PLAN.md)
+- [Minimal automation system design](docs/AUTOMATIONS.md)
 - [Conversational model setup](docs/CONVERSATIONAL_MODEL_SETUP.md)
 - [Task budgets and structured logs](docs/BUDGETS_AND_LOGS.md)
 - [Failure recovery](docs/FAILURE_RECOVERY.md)

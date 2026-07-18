@@ -17,8 +17,10 @@ from allpath_agent.connectors import (
     SlackConnector,
     TelegramConnector,
     WhatsAppConnector,
+    diagnose_connectors,
 )
 from allpath_agent.models import DemoProvider, ModelRouter, ProviderError, ProviderPool
+from allpath_agent.gateway_service import GatewayServiceManager
 from allpath_agent.observability import JsonlEventLogger
 from allpath_agent.provider_runtime import (
     available_provider_ids,
@@ -72,8 +74,10 @@ def build_parser() -> argparse.ArgumentParser:
     sessions = subparsers.add_parser("sessions", help="List recent sessions")
     sessions.add_argument("--limit", type=int, default=20)
     subparsers.add_parser("providers", help="Show configured model providers and auth status")
-    subparsers.add_parser("connectors", help="Show messaging connector status")
+    connectors = subparsers.add_parser("connectors", help="Show messaging connector status")
+    connectors.add_argument("--test", action="store_true", help="Verify credentials and runtime readiness")
     gateway = subparsers.add_parser("gateway", help="Run configured messaging connectors")
+    gateway.add_argument("action", nargs="?", choices=("run", "install", "status", "restart", "uninstall"), default="run")
     gateway.add_argument("--once", action="store_true", help="Poll once and exit")
     gateway.add_argument("--poll-interval", type=float, default=1.0)
     return parser
@@ -95,8 +99,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         database = Database(home / "state.db")
         database.initialize()
         if args.command == "connectors":
+            if args.test:
+                return _test_connectors(home, ConnectorConfigRepository(database), print)
             return _show_connectors(ConnectorConfigRepository(database), print)
         if args.command == "gateway":
+            if args.action != "run":
+                return _manage_gateway_service(home, args.action, print)
             return _run_gateway(home, database, args.once, args.poll_interval, print, _stderr)
         if args.command == "sessions":
             return _list_sessions(SessionRepository(database), args.limit, print)
@@ -199,6 +207,10 @@ def _chat(
             input_hint = connection_workflow.input_hint(active_session_id)
             if input_hint is None:
                 input_hint = slack_workflow.input_hint(active_session_id)
+            if input_hint is None:
+                input_hint = whatsapp_workflow.input_hint(active_session_id)
+            if input_hint is None:
+                input_hint = telegram_workflow.input_hint(active_session_id)
             if input_hint is None and not live_mode:
                 input_hint = "Try: 连接模型 · what can you do · calculate 18 * 7"
             prompt = f"You>  ({input_hint})\n> " if input_hint else "You> "
@@ -257,8 +269,11 @@ def _chat(
         if user_message == "/route":
             _show_latest_route(RoutingDecisionRepository(database), active_session_id, output)
             continue
-        if user_message == "/connectors":
-            _show_connectors(ConnectorConfigRepository(database), output)
+        if user_message in {"/connectors", "/connectors test"}:
+            if user_message.endswith(" test"):
+                _test_connectors(home, ConnectorConfigRepository(database), output)
+            else:
+                _show_connectors(ConnectorConfigRepository(database), output)
             continue
         if user_message in {"/model", "/models current"}:
             _show_current_model(home, database, active_session_id, output)
@@ -616,6 +631,21 @@ def _show_connectors(configs: ConnectorConfigRepository, output: Output) -> int:
     return 0
 
 
+def _test_connectors(home: Path, configs: ConnectorConfigRepository, output: Output) -> int:
+    records = configs.list_all()
+    if not records:
+        output("No messaging connectors configured. Try: connect Telegram")
+        return 0
+    secrets = SecretStore(home / "secrets.json").values()
+    for diagnostic in diagnose_connectors(records, secrets):
+        output(f"{diagnostic.connector_id}:")
+        output(f"  credentials: {diagnostic.credentials}")
+        output(f"  verification: {diagnostic.verification}")
+        output(f"  runtime: {diagnostic.runtime}")
+        output(f"  next: {diagnostic.action}")
+    return 0
+
+
 def _requests_telegram_setup(message: str) -> bool:
     lowered = message.lower()
     return "telegram" in lowered and any(
@@ -714,6 +744,30 @@ def _run_gateway(
         return 1
     finally:
         runtime.stop_all()
+
+
+def _manage_gateway_service(home: Path, action: str, output: Output) -> int:
+    manager = GatewayServiceManager(home)
+    try:
+        if action == "install":
+            status = manager.install()
+        elif action == "status":
+            status = manager.status()
+        elif action == "restart":
+            status = manager.restart()
+        elif action == "uninstall":
+            status = manager.uninstall()
+        else:
+            raise ConfigError(f"unknown gateway service action: {action}")
+    except RuntimeError as error:
+        raise ConfigError(str(error)) from error
+    state = "running" if status.running else "stopped"
+    installed = "installed" if status.installed else "not installed"
+    output(f"Gateway service: {installed}, {state} ({status.detail})")
+    if status.installed:
+        output(f"Service file: {manager.service_path}")
+        output(f"Logs: {home / 'logs' / 'gateway.out.log'}")
+    return 0
 
 
 def _show_models(config: AppConfig, output: Output) -> None:

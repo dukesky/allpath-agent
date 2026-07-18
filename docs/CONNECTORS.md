@@ -36,23 +36,45 @@ process restarts. Platform credentials do not belong in this table.
 - a standard-library HTTPS JSON transport for the future live runner.
 
 Conversational bot-token setup and a foreground gateway runner are implemented.
-Say `connect Telegram` after connecting a model, follow the BotFather guidance,
-and enter the token through hidden input. Allpath verifies the bot with `getMe`
+Say `connect Telegram` after connecting a model. A four-step resumable guide
+opens the official BotFather, creates the bot, selects a username, and safely
+collects the token through hidden input. Allpath verifies the bot with `getMe`
 before storing the token and marking Telegram active.
 
 Run:
 
 ```bash
 allpath-agent connectors
+allpath-agent connectors --test
 allpath-agent gateway
 ```
+
+`connectors --test` and the in-chat `/connectors test` command report credential
+presence, live platform verification, runtime readiness, and a corrective next
+action without printing credential values. WhatsApp additionally checks whether
+the local webhook listener is reachable on port `8787`.
 
 `gateway` verifies the active bot, long-polls Telegram, preserves one Allpath
 session per Telegram conversation, and replies through the same chat. Run
 `allpath-agent gateway --once` for a one-cycle health/integration check.
 
-The gateway is currently a foreground process. Background service installation,
-bounded polling retry/backoff, and process supervision remain the next step.
+The gateway can run in the foreground for debugging or as a per-user background
+service. Bounded polling retry/backoff and richer process supervision remain
+future reliability work.
+
+Install the gateway as a per-user background service with:
+
+```bash
+allpath-agent gateway install
+allpath-agent gateway status
+allpath-agent gateway restart
+allpath-agent gateway uninstall
+```
+
+macOS uses `~/Library/LaunchAgents/ai.allpath.gateway.plist`; Linux uses a user
+systemd unit. Generated service files contain command paths and log locations,
+but never connector credentials. Foreground `allpath-agent gateway` remains the
+debugging path.
 
 ## Safety boundaries
 
@@ -72,10 +94,10 @@ installation does not need a public webhook URL. Setup requires two credentials:
 - a Bot Token beginning with `xoxb-`;
 - an App-Level Token beginning with `xapp-` and the `connections:write` scope.
 
-In Slack's app configuration:
+The in-agent seven-step guide walks through Slack's app configuration:
 
 1. Create an app at [Slack API apps](https://api.slack.com/apps).
-2. Add the `chat:write` bot scope.
+2. Add the `chat:write` and `im:history` bot scopes.
 3. Enable the App Home Messages tab.
 4. Enable Event Subscriptions and subscribe to the `message.im` bot event.
 5. Enable Socket Mode.
@@ -92,6 +114,21 @@ originating Slack thread.
 
 Official references: [Slack Socket Mode client](https://docs.slack.dev/tools/python-slack-sdk/socket-mode/)
 and [Python Slack SDK](https://docs.slack.dev/tools/python-slack-sdk/).
+
+## WhatsApp Cloud API adapter
+
+WhatsApp uses Meta's official Cloud API rather than unofficial QR-code or
+WhatsApp Web automation. The nine-step resumable guide covers Meta Business app
+creation, WhatsApp product setup, credentials, the local gateway, an HTTPS
+tunnel, webhook verification, the `messages` subscription, and a real reply
+test.
+
+Credential verification and end-to-end verification are separate checkpoints.
+Allpath first verifies the Access Token and Phone Number ID. It then keeps the
+workflow active until the user configures `/webhooks/whatsapp`, subscribes to
+`messages`, and confirms that a message sent from WhatsApp receives an Allpath
+reply. Access tokens, App Secrets, and verify tokens use hidden input and never
+enter workflow state.
 
 ## Next implementation
 

@@ -10,6 +10,11 @@ The format follows Keep a Changelog conventions. During development, changes acc
 
 - Added a reusable connector-onboarding guide engine with numbered steps, bilingual instructions, progress hints, back/status/cancel navigation, and persistent resume points.
 - Replaced Slack's one-paragraph setup prompt with a seven-step conversational tutorial covering app creation, bot scopes, App Home, events, Socket Mode, installation, and secure token collection.
+- Migrated Telegram to a four-step BotFather tutorial with progress, navigation, restart recovery, and delayed hidden token collection.
+- Migrated WhatsApp to a nine-step Meta Cloud API tutorial that separates credential verification from gateway, HTTPS tunnel, webhook, subscription, and real-message verification.
+- Added `allpath-agent connectors --test` and `/connectors test` diagnostics for credential presence, live verification, runtime readiness, WhatsApp webhook reachability, and corrective actions.
+- Added idempotent per-user background gateway service commands for macOS LaunchAgents and Linux user systemd, with safe status, restart, uninstall, and credential-free service files.
+- Added the implementation-ready minimal automation design covering SQLite jobs and runs, schedule semantics, execution invariants, safe connector delivery, CLI surfaces, and deferred scope.
 
 ## [0.1.0] - 2026-07-15
 

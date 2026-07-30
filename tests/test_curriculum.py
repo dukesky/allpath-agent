@@ -113,9 +113,9 @@ class CurriculumServiceTestCase(unittest.TestCase):
         self.assertIsNone(second)
         self.assertEqual(self.progress.get("basic_chat").status, "succeeded")
 
-    def test_catalog_exposes_all_eight_capabilities(self) -> None:
+    def test_catalog_exposes_current_capabilities(self) -> None:
         rows = self.service.list_progress()
-        self.assertEqual(len(rows), 8)
+        self.assertEqual(len(rows), 14)
         self.assertTrue(all(status == "unseen" for _, _, status in rows))
 
     def test_success_evidence_prevents_reteaching_used_capability(self) -> None:
@@ -172,6 +172,18 @@ class CurriculumServiceTestCase(unittest.TestCase):
         for _ in range(3):
             self.service.record_success("calculator")
         self.assertEqual(self.progress.get("calculator").status, "habitual")
+
+    def test_attempt_is_recorded_before_verified_success(self) -> None:
+        self.service.record_tried("scheduled_automations")
+        self.assertEqual(self.progress.get("scheduled_automations").status, "tried")
+
+        self.service.record_success("scheduled_automations")
+        self.assertEqual(self.progress.get("scheduled_automations").status, "succeeded")
+
+    def test_attempt_does_not_regress_mastered_capability(self) -> None:
+        self.service.record_success("durable_memory")
+        self.service.record_tried("durable_memory")
+        self.assertEqual(self.progress.get("durable_memory").status, "succeeded")
 
 
 if __name__ == "__main__":

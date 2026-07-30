@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from allpath_agent.application import AgentApplication
+from allpath_agent.hooks import HookBus
 from allpath_agent.storage import ConnectorSessionRepository, SessionRepository
 
 from .contracts import Connector, InboundMessage, OutboundMessage
@@ -34,11 +35,13 @@ class ConnectorRuntime:
         registry: ConnectorRegistry,
         sessions: SessionRepository,
         bindings: ConnectorSessionRepository,
+        hooks: HookBus | None = None,
     ):
         self._application = application
         self._registry = registry
         self._sessions = sessions
         self._bindings = bindings
+        self._hooks = hooks or getattr(application, "hooks", HookBus())
 
     def poll_once(self, connector_id: str) -> int:
         connector = self._registry.get(connector_id)
@@ -58,6 +61,13 @@ class ConnectorRuntime:
     def dispatch(self, event: InboundMessage) -> str:
         if event.connector_id not in self._registry.ids():
             raise ValueError(f"connector is not registered: {event.connector_id}")
+        self._hooks.emit(
+            "connector_message_received",
+            connector_id=event.connector_id,
+            conversation_id=event.conversation_id,
+            sender_id=event.sender_id,
+            message_id=event.message_id,
+        )
         session_id = self._bindings.session_for(
             event.connector_id,
             event.conversation_id,
@@ -81,5 +91,13 @@ class ConnectorRuntime:
                 reply_to_message_id=event.message_id,
                 metadata=event.metadata,
             )
+        )
+        self._hooks.emit(
+            "connector_reply_sent",
+            connector_id=event.connector_id,
+            conversation_id=event.conversation_id,
+            source_message_id=event.message_id,
+            session_id=session_id,
+            task_id=result.task_id,
         )
         return session_id

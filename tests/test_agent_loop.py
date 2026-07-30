@@ -469,6 +469,11 @@ class AgentLoopTestCase(unittest.TestCase):
             ["call-1", "call-2"],
         )
         self.assertEqual(executions[0]["status"], "interrupted")
+        tool_started = next(
+            record for record in events.records if record["event"] == "tool_call_started"
+        )
+        self.assertEqual(tool_started["tool"], "first")
+        self.assertNotIn("arguments", tool_started)
         self.assertEqual(events.records[-1]["event"], "task_interrupted")
 
     def test_registry_runtime_denies_side_effect_and_returns_result_to_model(self) -> None:

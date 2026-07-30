@@ -1,6 +1,6 @@
 # Allpath Agent
 
-Latest release: [v0.1.0](release_notes/v0.1.0.md)
+Latest release: [v0.2.0](release_notes/v0.2.0.md)
 
 [![CI](https://github.com/dukesky/allpath-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/dukesky/allpath-agent/actions/workflows/ci.yml)
 
@@ -49,7 +49,7 @@ The same progress also shapes the launch card: completed, habitual, and
 dismissed lessons are skipped so startup guidance advances with the user rather
 than repeating a permanent tutorial.
 
-The current curriculum contains eight implemented capabilities. Suggestions appear only after the current answer, at most once per session. Recent suggestions receive a cross-session cooldown, successful actions advance progress automatically, and `/dismiss` suppresses unwanted lessons.
+The current curriculum contains fourteen implemented capabilities. Suggestions appear only after the current answer, at most once per session. Recent suggestions receive a cross-session cooldown, successful actions advance progress automatically, and `/dismiss` suppresses unwanted lessons.
 
 Examples:
 
@@ -105,6 +105,18 @@ Vertex AI rather than reusing Gemini CLI personal OAuth credentials.
 The core owns conversation state, model calls, tool execution, persistence, interruption, and workflow boundaries. Calendar, Slack, WhatsApp, and other integrations belong in connectors rather than inside the core loop.
 
 ## MVP scope
+
+### Terminal conversation UI
+
+The classic CLI remains scrollback-friendly instead of becoming a full-screen TUI:
+
+- user text is entered inside a visible `YOU` composer;
+- model output appears in an `ALLPATH · <ROLE>` response panel;
+- task, model retry, and tool progress appears as compact `●` and `┊` activity lines;
+- side-effect approvals use a bordered `APPROVAL` panel with the exact bounded argument preview;
+- token and cost information stays on a compact activity line;
+- onboarding suggestions appear separately as `NEXT` cards;
+- color is enabled interactively and omitted from redirected output and tests.
 
 The first locally runnable MVP includes:
 
@@ -345,6 +357,13 @@ Set model prices from the provider's current pricing page before enabling a nonz
 ## Documentation
 
 - [Product design](docs/PRODUCT_DESIGN.md)
+- [Agent evolution plan](docs/AGENT_EVOLUTION_PLAN.md)
+- [Workspace file tools](docs/WORKSPACE_TOOLS.md)
+- [Bounded terminal tool](docs/TERMINAL_TOOL.md)
+- [Skills](docs/SKILLS.md)
+- [MCP integration](docs/MCP.md)
+- [Hook Bus and proactive triggers](docs/HOOKS.md)
+- [Browser and computer-use boundary](docs/BROWSER_COMPUTER_BOUNDARY.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Installation](docs/INSTALLATION.md)
 - [Model providers and authentication](docs/PROVIDERS.md)

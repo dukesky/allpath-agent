@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from allpath_agent.agent import AgentLoop, AgentResult
 from allpath_agent.curriculum import CapabilitySuggestion, CurriculumService
+from allpath_agent.hooks import HookBus
 from allpath_agent.models import ModelProfile, ModelRouter, TaskSignals
 from allpath_agent.storage import (
     RoutingDecisionRepository,
@@ -32,6 +33,7 @@ class AgentApplication:
         curriculum: CurriculumService,
         system_prompt: str,
         live_provider: bool,
+        hooks: HookBus | None = None,
     ):
         self._loop = loop
         self._router = router
@@ -41,12 +43,16 @@ class AgentApplication:
         self._curriculum = curriculum
         self._system_prompt = system_prompt
         self._live_provider = live_provider
+        self.hooks = hooks or HookBus()
 
     def start_session(self, session_id: str) -> None:
         self._curriculum.start_session(session_id)
 
     def record_capability_success(self, capability_id: str) -> None:
         self._curriculum.record_success(capability_id)
+
+    def record_capability_tried(self, capability_id: str) -> None:
+        self._curriculum.record_tried(capability_id)
 
     def dismiss_suggestion(self, session_id: str, capability_id: str | None = None) -> bool:
         return self._curriculum.dismiss(session_id, capability_id)
@@ -56,6 +62,8 @@ class AgentApplication:
 
     def send(self, session_id: str, message: str) -> ApplicationResult:
         task_id = str(uuid4())
+        intents = detect_intents(message)
+        self._record_curriculum_attempts(intents)
         signals = analyze_task(message)
         decision = self._router.route(signals)
         self._routing_decisions.record(
@@ -77,10 +85,30 @@ class AgentApplication:
         evidence = self._task_evidence(session_id, task_id, decision.profile.name)
         suggestion = self._curriculum.after_task(
             session_id,
-            detect_intents(message),
+            intents,
             evidence,
         )
         return ApplicationResult(result, task_id, decision.reason, suggestion)
+
+    def _record_curriculum_attempts(self, intents: set[str]) -> None:
+        intent_capabilities = {
+            "memory": "durable_memory",
+            "time": "current_time",
+            "calculation": "calculator",
+            "session": "session_management",
+            "deep_analysis": "model_routing",
+            "approval": "tool_approvals",
+            "provider": "live_provider",
+            "connector": "messaging_connectors",
+            "automation": "scheduled_automations",
+            "workspace": "workspace_files",
+            "terminal": "terminal_tasks",
+            "skill": "skills",
+            "mcp": "mcp_tools",
+        }
+        for intent, capability_id in intent_capabilities.items():
+            if intent in intents:
+                self._curriculum.record_tried(capability_id)
 
     def _task_evidence(self, session_id: str, task_id: str, profile_name: str) -> set[str]:
         evidence = {"basic_chat"}
@@ -94,10 +122,19 @@ class AgentApplication:
             "calculate": "calculator",
             "memory_get": "durable_memory",
             "memory_set": "durable_memory",
+            "read_file": "workspace_files",
+            "search_files": "workspace_files",
+            "write_file": "workspace_files",
+            "patch": "workspace_files",
+            "terminal": "terminal_tasks",
+            "skills_list": "skills",
+            "skill_view": "skills",
         }
         for execution in self._tool_executions.list_for_task(session_id, task_id):
             if execution["status"] == "succeeded" and execution["tool_name"] in tool_capabilities:
                 evidence.add(tool_capabilities[execution["tool_name"]])
+            if execution["status"] == "succeeded" and execution["tool_name"].startswith("mcp__"):
+                evidence.add("mcp_tools")
         if self._approvals.list_for_task(session_id, task_id):
             evidence.add("tool_approvals")
         return evidence
@@ -108,7 +145,26 @@ def analyze_task(message: str) -> TaskSignals:
     deep_phrases = ("deep analysis", "analyze deeply", "深入分析", "详细分析", "不要遗漏")
     code_phrases = ("modify code", "edit file", "fix code", "修改代码", "修改文件", "修复代码")
     risk_phrases = ("delete", "send email", "payment", "删除", "发送邮件", "付款")
-    tool_phrases = ("time", "calculate", "remember", "时间", "计算", "记住")
+    tool_phrases = (
+        "time",
+        "calculate",
+        "remember",
+        "read file",
+        "search file",
+        "find in file",
+        "时间",
+        "计算",
+        "记住",
+        "读取文件",
+        "搜索文件",
+        "查找文件",
+        "run command",
+        "run tests",
+        "terminal",
+        "执行命令",
+        "运行测试",
+        "终端",
+    )
     return TaskSignals(
         estimated_tool_calls=1 if any(phrase in lowered for phrase in tool_phrases) else 0,
         context_tokens=max(1, len(message) // 3),
@@ -156,6 +212,54 @@ def detect_intents(message: str) -> set[str]:
             "connecting a model",
             "模型配置",
             "连接模型",
+        ),
+        "connector": (
+            "telegram",
+            "slack",
+            "whatsapp",
+            "messaging channel",
+            "消息渠道",
+            "连接器",
+        ),
+        "automation": (
+            "automation",
+            "cron",
+            "scheduled job",
+            "定时任务",
+            "自动化",
+            "定时触发",
+        ),
+        "workspace": (
+            "read file",
+            "search file",
+            "find in file",
+            "repository",
+            "codebase",
+            "读取文件",
+            "搜索文件",
+            "查找文件",
+            "项目结构",
+            "代码库",
+        ),
+        "terminal": (
+            "run command",
+            "run tests",
+            "terminal",
+            "shell command",
+            "执行命令",
+            "运行测试",
+            "终端",
+        ),
+        "skill": (
+            "skill",
+            "skills",
+            "技能",
+            "能力包",
+        ),
+        "mcp": (
+            "mcp",
+            "model context protocol",
+            "工具服务器",
         ),
     }
     for intent, phrases in mappings.items():

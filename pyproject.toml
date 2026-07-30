@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "allpath-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "A small personal agent with progressive capability discovery and model routing"
 requires-python = ">=3.11"
-dependencies = ["slack_sdk>=3.0,<4"]
+dependencies = ["slack_sdk>=3.0,<4", "mcp>=1,<2"]
 
 [project.scripts]
 allpath-agent = "allpath_agent.cli.main:main"
@@ -21,3 +21,6 @@ pythonpath = ["src"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+allpath_agent = ["builtin_skills/*/SKILL.md"]

@@ -58,7 +58,8 @@ class CliEndToEndTestCase(unittest.TestCase):
             home = Path(directory)
             first = run_cli(home, "hello\n/exit\n", "--demo")
             self.assertEqual(first.returncode, 0, first.stderr)
-            self.assertIn("Agent [fast]> Hello! I'm running locally.", first.stdout)
+            self.assertIn("ALLPATH · FAST", first.stdout)
+            self.assertIn("│  Hello! I'm running locally.", first.stdout)
             session_match = re.search(r"Session: ([0-9a-f-]+)", first.stdout)
             self.assertIsNotNone(session_match)
             session_id = session_match.group(1)
@@ -73,8 +74,8 @@ class CliEndToEndTestCase(unittest.TestCase):
             self.assertEqual(second.returncode, 0, second.stderr)
             messages = MessageRepository(Database(home / "state.db")).list_for_session(session_id)
             self.assertEqual([message.role for message in messages], ["user", "assistant", "user", "assistant"])
-            self.assertEqual(first.stdout.count("Tip ["), 1)
-            self.assertEqual(second.stdout.count("Tip ["), 0)
+            self.assertEqual(first.stdout.count("NEXT ·"), 1)
+            self.assertEqual(second.stdout.count("NEXT ·"), 0)
 
     def test_demo_writes_structured_logs_without_conversation_content(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -104,7 +105,7 @@ class CliEndToEndTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             result = run_cli(Path(directory), "请深入分析这个问题\n/exit\n", "--demo")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Agent [advanced]>", result.stdout)
+        self.assertIn("ALLPATH · ADVANCED", result.stdout)
 
     def test_route_command_explains_latest_model_decision(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -129,7 +130,7 @@ class CliEndToEndTestCase(unittest.TestCase):
             )
             memory = MemoryRepository(Database(home / "state.db")).get("demo_note")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Approval required: memory_set", result.stdout)
+        self.assertIn("APPROVAL · memory_set", result.stdout)
         self.assertIsNotNone(memory)
         self.assertEqual(memory.content, "concise answers")
 
@@ -150,6 +151,29 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertIn("basic_chat", result.stdout)
         self.assertIn("live_provider", result.stdout)
         self.assertRegex(result.stdout, r"live_provider\s+unavailable")
+
+    def test_automations_command_records_curriculum_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            run_cli(home, "/automations\n/exit\n", "--demo")
+            database = Database(home / "state.db")
+            progress = CapabilityProgressRepository(database).get("scheduled_automations")
+
+        self.assertIsNotNone(progress)
+        self.assertEqual(progress.status, "tried")
+
+    def test_mcp_command_degrades_cleanly_and_records_curriculum_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            result = run_cli(home, "/mcp\n/exit\n", "--demo")
+            database = Database(home / "state.db")
+            progress = CapabilityProgressRepository(database).get("mcp_tools")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("MCP Python SDK:", result.stdout)
+        self.assertIn("No MCP servers configured.", result.stdout)
+        self.assertIsNotNone(progress)
+        self.assertEqual(progress.status, "tried")
 
     def test_starter_conversation_introduces_provider_setup_on_request(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -224,8 +248,8 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("你好！我正在本地运行", result.stdout)
         self.assertIn("目前在本地模式下，我可以帮你安全计算", result.stdout)
-        self.assertNotIn("Tip [model_routing]", result.stdout)
-        self.assertNotIn("Tip [live_provider]", result.stdout)
+        self.assertNotIn("NEXT · model_routing", result.stdout)
+        self.assertNotIn("NEXT · live_provider", result.stdout)
 
     def test_first_launch_enters_local_starter_mode_without_config(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

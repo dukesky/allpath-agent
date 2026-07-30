@@ -96,6 +96,14 @@ Real API tests are intentionally separate from default CI because they require s
 - Unknown tools are rejected.
 - Invalid arguments never reach handlers.
 - Read-only tools can execute under policy.
+- Workspace reads reject absolute paths, traversal, symlinks, binary data, oversized files, and credential-like files.
+- Workspace search stays bounded and returns relative paths with deterministic line evidence.
+- Workspace writes require approval, preserve existing data after denial, and use atomic replacement.
+- Existing-file writes and patches reject stale SHA-256 digests and ambiguous replacement counts.
+- Terminal commands require approval, stay in workspace cwd, strip secrets, enforce allowlists and timeouts, and bound output.
+- Skills preserve source precedence, progressive disclosure, and safe supporting-file paths.
+- MCP schemas are normalized, namespaced, registry-safe, and approval-gated.
+- Hook conditions dispatch deterministically and isolate handler failures.
 - Side-effecting tools cannot execute without explicit approval.
 - Approval and denial are persisted and returned to the model.
 
@@ -111,7 +119,9 @@ Real API tests are intentionally separate from default CI because they require s
 - At most one proactive recommendation per session.
 - Prerequisites prevent premature lessons.
 - Dismissal and cooldown behavior.
+- Relevant user intent records `tried` without claiming verified success.
 - Real successful actions advance learning state.
+- Repeated successful actions become `habitual`; later attempts never regress mastery.
 - Current work completes before a lesson is suggested.
 
 ### Milestone 6: Hardening

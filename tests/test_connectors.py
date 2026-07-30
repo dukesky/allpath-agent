@@ -33,7 +33,7 @@ class FakeApplication:
 
     def send(self, session_id: str, text: str):
         self.messages.append((session_id, text))
-        return SimpleNamespace(agent=SimpleNamespace(content=f"reply: {text}"))
+        return SimpleNamespace(agent=SimpleNamespace(content=f"reply: {text}"), task_id="task-1")
 
 
 class FakeConnector:

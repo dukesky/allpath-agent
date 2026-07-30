@@ -92,6 +92,24 @@ class CurriculumService:
             sessions_since_offer=existing.sessions_since_offer if existing else None,
         )
 
+    def record_tried(self, capability_id: str) -> None:
+        if not self._engine.has_capability(capability_id):
+            raise ValueError(f"unknown capability: {capability_id}")
+        existing = self._progress.get(capability_id)
+        if existing and existing.status in {
+            LearningStatus.SUCCEEDED.value,
+            LearningStatus.HABITUAL.value,
+            LearningStatus.DISMISSED.value,
+        }:
+            return
+        self._progress.save(
+            capability_id,
+            LearningStatus.TRIED.value,
+            offer_count=existing.offer_count if existing else 0,
+            success_count=existing.success_count if existing else 0,
+            sessions_since_offer=existing.sessions_since_offer if existing else None,
+        )
+
     def dismiss(self, session_id: str, capability_id: str | None = None) -> bool:
         selected_id = capability_id
         if selected_id is None:

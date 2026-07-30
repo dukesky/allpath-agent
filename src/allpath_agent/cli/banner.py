@@ -15,11 +15,16 @@ ART = (
 CAPABILITY_HINTS = {
     "durable_memory": "Try: remember that I prefer concise answers",
     "current_time": "Try: what time is it in Asia/Shanghai?",
-    "calculator": "Try: calculate 18 * (7 + 3)",
     "session_management": "Explore: /sessions and /new",
     "model_routing": "Explore: /route after a complex request",
     "tool_approvals": "Try: remember a preference to see safe approval",
     "live_provider": "Explore: /model and /models",
+    "messaging_connectors": "Connect: Telegram, Slack, or WhatsApp",
+    "scheduled_automations": "Explore: /automations",
+    "workspace_files": "Try: ask Allpath to explain this project",
+    "terminal_tasks": "Try: ask Allpath to run this project's tests",
+    "skills": "Explore: /skills",
+    "mcp_tools": "Explore: /mcp",
 }
 
 

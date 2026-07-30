@@ -22,6 +22,7 @@ from allpath_agent.connectors import (
 )
 from allpath_agent.models import DemoProvider, ModelRouter, ProviderError, ProviderPool
 from allpath_agent.gateway_service import GatewayServiceManager
+from allpath_agent.hooks import HookBus
 from allpath_agent.observability import JsonlEventLogger
 from allpath_agent.provider_runtime import (
     available_provider_ids,
@@ -46,7 +47,15 @@ from allpath_agent.storage import (
     ToolExecutionRepository,
     WorkflowRunRepository,
 )
-from allpath_agent.tools import ToolRuntime, create_builtin_registry
+from allpath_agent.tools import (
+    MCP_AVAILABLE,
+    SkillCatalog,
+    ToolRuntime,
+    create_builtin_registry,
+    default_skill_roots,
+    discover_and_register_mcp_tools,
+    load_mcp_config,
+)
 from allpath_agent.workflows import (
     ProviderConnectionWorkflow,
     SlackConnectionWorkflow,
@@ -60,6 +69,7 @@ from allpath_agent.workflows import (
 from .account_auth import ensure_codex_login
 from .approvals import TerminalApprovalHandler
 from .banner import launch_lines
+from .render import TerminalChatUI
 from .selector import terminal_select
 
 
@@ -175,7 +185,9 @@ def _chat(
     else:
         session = sessions.create()
 
+    chat_ui = TerminalChatUI(input_fn, output)
     application = _build_application(home, database, demo, input_fn, output)
+    application.hooks.subscribe("*", chat_ui.handle_event)
     connection_workflow = ProviderConnectionWorkflow(
         home / "config.toml",
         WorkflowRunRepository(database),
@@ -197,6 +209,8 @@ def _chat(
         ConnectorConfigRepository(database),
     )
     hidden_input = secret_input_fn or getpass.getpass
+    skill_roots = default_skill_roots(home, Path.cwd())
+    skill_catalog = SkillCatalog(skill_roots)
     application.start_session(session.id)
     if requested_session_id:
         application.record_capability_success("session_management")
@@ -230,9 +244,8 @@ def _chat(
             if input_hint is None:
                 input_hint = telegram_workflow.input_hint(active_session_id)
             if input_hint is None and not live_mode:
-                input_hint = "Try: 连接模型 · what can you do · calculate 18 * 7"
-            prompt = f"You>  ({input_hint})\n> " if input_hint else "You> "
-            user_message = input_fn(prompt).strip()
+                input_hint = "Try: 连接模型 · connect Telegram · what can you do"
+            user_message = chat_ui.read_message(input_hint)
         except EOFError:
             output("")
             output("Goodbye.")
@@ -254,7 +267,7 @@ def _chat(
             output(
                 "Commands: /help, /new, /sessions, /resume <session-id>, "
                 "/model, /models, /route, /connectors, /capabilities, "
-                "/automations, /dismiss [capability-id], /exit"
+                "/automations, /skills, /mcp, /dismiss [capability-id], /exit"
             )
             continue
         if user_message.startswith("/help "):
@@ -294,7 +307,20 @@ def _chat(
                 _show_connectors(ConnectorConfigRepository(database), output)
             continue
         if user_message == "/automations":
+            application.record_capability_tried("scheduled_automations")
             _list_automations(AutomationJobRepository(database), output)
+            continue
+        if user_message == "/skills":
+            skills = skill_catalog.list_metadata()
+            if not skills:
+                output("No Skills are available.")
+            for skill in skills:
+                output(f"/{skill['name']:<24} {skill['source']:<8} {skill['description']}")
+            application.record_capability_tried("skills")
+            continue
+        if user_message == "/mcp":
+            _show_mcp(home, Path.cwd(), output)
+            application.record_capability_tried("mcp_tools")
             continue
         if user_message in {"/model", "/models current"}:
             _show_current_model(home, database, active_session_id, output)
@@ -308,6 +334,7 @@ def _chat(
                 changed = _run_model_subcommand(home, action, output, error_output)
                 if changed:
                     application = _build_application(home, database, False, input_fn, output)
+                    application.hooks.subscribe("*", chat_ui.handle_event)
                     application.start_session(active_session_id)
                 continue
             else:
@@ -336,11 +363,13 @@ def _chat(
                 elif selected == 2:
                     if _select_role_reassignment(home, selector_fn, output, error_output):
                         application = _build_application(home, database, False, input_fn, output)
+                        application.hooks.subscribe("*", chat_ui.handle_event)
                         application.start_session(active_session_id)
                     continue
                 elif selected == 3:
                     if _select_role_removal(home, selector_fn, output, error_output):
                         application = _build_application(home, database, False, input_fn, output)
+                        application.hooks.subscribe("*", chat_ui.handle_event)
                         application.start_session(active_session_id)
                     continue
                 else:
@@ -354,17 +383,22 @@ def _chat(
                 error_output("No capability suggestion found to dismiss.")
             continue
 
+        expanded_skill = skill_catalog.expand_invocation(user_message)
+        if expanded_skill is not None:
+            user_message = expanded_skill
+
         if (
             _requests_telegram_setup(user_message)
             or _requests_slack_setup(user_message)
             or _requests_whatsapp_setup(user_message)
         ) and not (home / "config.toml").is_file():
-            output("Agent [setup]> Connect a reasoning model first, then connect a messaging channel.")
+            chat_ui.assistant("Connect a reasoning model first, then connect a messaging channel.", "setup")
             continue
         whatsapp_result = whatsapp_workflow.handle(active_session_id, user_message)
         if whatsapp_result.handled:
+            application.record_capability_tried("messaging_connectors")
             for message in whatsapp_result.messages:
-                output(f"Agent [setup]> {message}")
+                chat_ui.assistant(message, "setup")
             while whatsapp_result.request_secret:
                 try:
                     secret = hidden_input(whatsapp_workflow.secret_prompt(active_session_id))
@@ -374,12 +408,15 @@ def _chat(
                     break
                 whatsapp_result = whatsapp_workflow.submit_secret(active_session_id, secret)
                 for message in whatsapp_result.messages:
-                    output(f"Agent [setup]> {message}")
+                    chat_ui.assistant(message, "setup")
+            if whatsapp_result.completed:
+                application.record_capability_success("messaging_connectors")
             continue
         slack_result = slack_workflow.handle(active_session_id, user_message)
         if slack_result.handled:
+            application.record_capability_tried("messaging_connectors")
             for message in slack_result.messages:
-                output(f"Agent [setup]> {message}")
+                chat_ui.assistant(message, "setup")
             while slack_result.request_secret:
                 try:
                     secret = hidden_input(slack_workflow.secret_prompt(active_session_id))
@@ -389,12 +426,15 @@ def _chat(
                     break
                 slack_result = slack_workflow.submit_secret(active_session_id, secret)
                 for message in slack_result.messages:
-                    output(f"Agent [setup]> {message}")
+                    chat_ui.assistant(message, "setup")
+            if slack_result.completed:
+                application.record_capability_success("messaging_connectors")
             continue
         telegram_result = telegram_workflow.handle(active_session_id, user_message)
         if telegram_result.handled:
+            application.record_capability_tried("messaging_connectors")
             for message in telegram_result.messages:
-                output(f"Agent [setup]> {message}")
+                chat_ui.assistant(message, "setup")
             if telegram_result.request_secret:
                 try:
                     token = hidden_input("Telegram bot token (hidden)> ")
@@ -404,7 +444,9 @@ def _chat(
                     continue
                 telegram_result = telegram_workflow.submit_secret(active_session_id, token)
                 for message in telegram_result.messages:
-                    output(f"Agent [setup]> {message}")
+                    chat_ui.assistant(message, "setup")
+            if telegram_result.completed:
+                application.record_capability_success("messaging_connectors")
             continue
 
         connection_result = connection_workflow.handle(
@@ -412,8 +454,9 @@ def _chat(
             user_message,
         )
         if connection_result.handled:
+            application.record_capability_tried("live_provider")
             for message in connection_result.messages:
-                output(f"Agent [setup]> {message}")
+                chat_ui.assistant(message, "setup")
             if selector_fn is not None:
                 connection_result = _run_connection_selectors(
                     connection_workflow,
@@ -421,6 +464,7 @@ def _chat(
                     connection_result,
                     selector_fn,
                     output,
+                    chat_ui,
                 )
             if connection_result.request_secret:
                 try:
@@ -434,7 +478,7 @@ def _chat(
                     secret,
                 )
                 for message in connection_result.messages:
-                    output(f"Agent [setup]> {message}")
+                    chat_ui.assistant(message, "setup")
                 if selector_fn is not None and not connection_result.request_secret:
                     connection_result = _run_connection_selectors(
                         connection_workflow,
@@ -442,6 +486,7 @@ def _chat(
                         connection_result,
                         selector_fn,
                         output,
+                        chat_ui,
                     )
             if connection_result.completed:
                 live_mode = True
@@ -452,6 +497,7 @@ def _chat(
                     input_fn,
                     output,
                 )
+                application.hooks.subscribe("*", chat_ui.handle_event)
                 application.start_session(active_session_id)
                 application.record_capability_success("live_provider")
             continue
@@ -475,15 +521,15 @@ def _chat(
             _close_interrupted_turn(messages, active_session_id)
             error_output(f"Task failed: {error}")
             continue
-        output(f"Agent [{result.agent.model_profile}]> {result.agent.content}")
+        chat_ui.assistant(result.agent.content, result.agent.model_profile)
         if result.agent.usage_reported:
-            output(
-                f"Usage: calls={result.agent.model_calls} "
-                f"tokens={result.agent.total_tokens} "
-                f"estimated_cost=${result.agent.estimated_cost_usd:.6f}"
+            chat_ui.usage(
+                calls=result.agent.model_calls,
+                tokens=result.agent.total_tokens,
+                estimated_cost_usd=result.agent.estimated_cost_usd,
             )
         if result.suggestion:
-            output(f"Tip [{result.suggestion.capability_id}]: {result.suggestion.message}")
+            chat_ui.suggestion(result.suggestion.capability_id, result.suggestion.message)
 
 
 def _run_connection_selectors(
@@ -492,7 +538,14 @@ def _run_connection_selectors(
     result,
     selector: Selector,
     output: Output,
+    chat_ui: TerminalChatUI | None = None,
 ):
+    def emit_setup(message: str) -> None:
+        if chat_ui is None:
+            output(message)
+        else:
+            chat_ui.assistant(message, "setup")
+
     while result.handled and not result.request_secret and not result.completed:
         step = workflow.current_step(session_id)
         if step == "choose_provider":
@@ -508,7 +561,7 @@ def _run_connection_selectors(
             provider_id = workflow.selected_provider(session_id)
             if provider_id == "openai-codex":
                 connected, message, command = ensure_codex_login()
-                output(f"Agent [setup]> {message}")
+                emit_setup(message)
                 if not connected:
                     return workflow.handle(session_id, "cancel")
                 workflow.set_external_command(session_id, command)
@@ -527,7 +580,7 @@ def _run_connection_selectors(
         else:
             return result
         for message in result.messages:
-            output(f"Agent [setup]> {message}")
+            emit_setup(message)
         if step == "choose_profile":
             return result
     return result
@@ -552,6 +605,7 @@ def _build_application(
         retry_base_delay_seconds = 0.5
         retry_max_delay_seconds = 8.0
         advanced_threshold = 6
+        environment: dict[str, str] = {}
     else:
         config = load_config(home / "config.toml")
         if any(profile.model.startswith("replace-with-") for profile in config.models):
@@ -571,11 +625,23 @@ def _build_application(
     memories = MemoryRepository(database)
     approvals = ToolApprovalRepository(database)
     tool_executions = ToolExecutionRepository(database)
+    registry = create_builtin_registry(
+        memories,
+        (Path.cwd(),),
+        default_skill_roots(home, Path.cwd()),
+    )
+    discover_and_register_mcp_tools(
+        registry,
+        home / "mcp.json",
+        Path.cwd(),
+        environment,
+    )
     runtime = ToolRuntime(
-        create_builtin_registry(memories),
+        registry,
         approvals,
         TerminalApprovalHandler(input_fn, output) if interactive_approvals else None,
     )
+    hooks = HookBus((JsonlEventLogger(home / "logs" / "agent.jsonl"),))
     loop = AgentLoop(
         provider,
         MessageRepository(database),
@@ -587,7 +653,7 @@ def _build_application(
         provider_max_attempts=provider_max_attempts,
         retry_base_delay_seconds=retry_base_delay_seconds,
         retry_max_delay_seconds=retry_max_delay_seconds,
-        event_logger=JsonlEventLogger(home / "logs" / "agent.jsonl"),
+        event_logger=hooks,
     )
     curriculum = CurriculumService(
         CurriculumEngine(default_capabilities()),
@@ -607,7 +673,19 @@ def _build_application(
         curriculum,
         system_prompt,
         live_provider=not demo,
+        hooks=hooks,
     )
+
+
+def _show_mcp(home: Path, workspace: Path, output: Output) -> None:
+    servers = load_mcp_config(home / "mcp.json", workspace)
+    output(f"MCP Python SDK: {'available' if MCP_AVAILABLE else 'missing'}")
+    if not servers:
+        output(f"No MCP servers configured. Add them to {home / 'mcp.json'}.")
+        return
+    for server in servers:
+        state = "enabled" if server.enabled else "disabled"
+        output(f"{server.name:<20} {state:<8} {server.command} {' '.join(server.args)}")
 
 
 def _list_sessions(sessions: SessionRepository, limit: int, output: Output) -> int:
@@ -831,7 +909,13 @@ def _manage_automations(home: Path, database: Database, args: argparse.Namespace
             output,
             interactive_approvals=False,
         )
-        service = AutomationService(jobs, runs, sessions, application)
+        service = AutomationService(
+            jobs,
+            runs,
+            sessions,
+            application,
+            hooks=getattr(application, "hooks", None),
+        )
         if args.action == "run":
             _require_automation_args(args, "job_id")
             run = service.run_now(args.job_id)

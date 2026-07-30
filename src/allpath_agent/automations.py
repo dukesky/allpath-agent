@@ -10,6 +10,7 @@ from allpath_agent.storage import (
     AutomationRunRepository,
     SessionRepository,
 )
+from allpath_agent.hooks import HookBus
 
 
 class AutomationApplication(Protocol):
@@ -103,12 +104,14 @@ class AutomationService:
         sessions: SessionRepository,
         application: AutomationApplication | None = None,
         now: Callable[[], datetime] | None = None,
+        hooks: HookBus | None = None,
     ):
         self.jobs = jobs
         self.runs = runs
         self.sessions = sessions
         self.application = application
         self._now = now or (lambda: datetime.now(UTC))
+        self._hooks = hooks or HookBus()
 
     def create_once(self, name: str, prompt: str, at: str, timezone: str) -> dict[str, Any]:
         next_run = parse_once(at, timezone)
@@ -186,6 +189,13 @@ class AutomationService:
             )
         if advance_schedule:
             self._advance(job, finished)
+        self._hooks.emit(
+            "automation_run_completed",
+            job_id=job["id"],
+            run_id=finished["id"],
+            status=finished["status"],
+            session_id=job["session_id"],
+        )
         return finished
 
     def _advance(self, job: dict[str, Any], run: dict[str, Any]) -> None:

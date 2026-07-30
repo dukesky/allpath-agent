@@ -288,6 +288,12 @@ class AgentLoop:
             tool_call.name,
             tool_call.arguments,
         )
+        self._events.emit(
+            "tool_call_started",
+            session_id=session_id,
+            task_id=task_id,
+            tool=tool_call.name,
+        )
         try:
             result = self._tool_executor.execute(
                 tool_call.name,

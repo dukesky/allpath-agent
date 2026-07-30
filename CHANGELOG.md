@@ -6,7 +6,28 @@ The format follows Keep a Changelog conventions. During development, changes acc
 
 ## Unreleased
 
+## [0.2.0] - 2026-07-29
+
 ### Added
+
+- Added a scrollback-friendly terminal conversation UI with a visible user composer, distinct Allpath response panels, model-role labels, compact usage metadata, and separate progressive-learning suggestion cards.
+- Added privacy-safe live task, model retry, and tool activity lines plus a bordered side-effect approval prompt.
+
+- Added a bounded approval-gated terminal tool with argv execution, workspace cwd enforcement, secret-stripped environment, executable allowlist, timeout process-group termination, and bounded output.
+- Added progressive Allpath Skills with built-in, user, and project discovery layers, `skills_list`, `skill_view`, `/skills`, and explicit slash invocation without system-prompt mutation.
+- Added initial repository-analysis, Connector-setup, and Automation Skills.
+- Added MCP stdio discovery and calls through the official Python SDK, including namespaced tools, schema normalization, secret allowlisting, workspace cwd enforcement, `/mcp` inspection, and approval gating.
+- Added a typed Hook Bus used by Agent lifecycle logging, Connector receive/send events, and Automation completion events, with conditional subscriptions and handler-failure isolation.
+- Documented explicit safety gates for future structured browser and isolated computer-use capabilities.
+- Added approval-gated `write_file` and exact-text `patch` workspace tools with atomic replacement, size limits, permission preservation, and SQLite audit records.
+- Added SHA-256 compare-and-swap protection so stale Agent writes cannot overwrite files changed since the latest read.
+- Added bounded terminal previews for long approval arguments while retaining the original bounded arguments in local audit records.
+- Added read-only workspace tools: bounded UTF-8 `read_file` and literal `search_files`, rooted at the CLI startup directory.
+- Added filesystem safety boundaries for traversal, absolute paths, symlinks, oversized or binary files, common dependency directories, and credential-like files.
+- Added Workspace File Understanding to the onboarding curriculum with verified tool-execution evidence.
+- Added the Agent evolution roadmap covering evidence-driven onboarding, workspace tools, Skills, MCP, proactive triggers, browser automation, and computer use.
+- Added curriculum entries for messaging connectors and scheduled automations.
+- Added explicit `tried` learning-state recording so Allpath can distinguish attempted features from verified success and habitual use.
 
 - Added a reusable connector-onboarding guide engine with numbered steps, bilingual instructions, progress hints, back/status/cancel navigation, and persistent resume points.
 - Replaced Slack's one-paragraph setup prompt with a seven-step conversational tutorial covering app creation, bot scopes, App Home, events, Socket Mode, installation, and secure token collection.

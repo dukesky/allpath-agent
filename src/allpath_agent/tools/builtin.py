@@ -4,15 +4,23 @@ import ast
 import math
 import operator
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from allpath_agent.storage import MemoryRepository
 
 from .registry import ToolDefinition, ToolRegistry, ToolRisk
+from .skills import register_skill_tools
+from .terminal import register_terminal_tool
+from .workspace import register_workspace_tools
 
 
-def create_builtin_registry(memories: MemoryRepository) -> ToolRegistry:
+def create_builtin_registry(
+    memories: MemoryRepository,
+    workspace_roots: tuple[Path, ...] = (),
+    skill_roots: tuple[tuple[Path, str], ...] = (),
+) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(
         ToolDefinition(
@@ -81,6 +89,11 @@ def create_builtin_registry(memories: MemoryRepository) -> ToolRegistry:
             handler=_calculate,
         )
     )
+    if workspace_roots:
+        register_workspace_tools(registry, workspace_roots)
+        register_terminal_tool(registry, workspace_roots)
+    if skill_roots:
+        register_skill_tools(registry, skill_roots)
     return registry
 
 

@@ -10,6 +10,13 @@ Chrome profile or reuse its cookies.
 - `browser_snapshot` refreshes page text and interactive element refs such as `e1`.
 - `browser_click` clicks one current ref after explicit approval.
 - `browser_type` replaces text in one editable ref after explicit approval.
+- `browser_screenshot` saves a viewport or full-page PNG after explicit approval.
+- `browser_download` saves a file initiated by one current ref after explicit approval.
+
+Successful `browser_navigate` and `browser_click` calls automatically return a
+fresh structured snapshot, so the model does not act on stale page state after
+navigation. `browser_type` deliberately returns only redacted metadata because a
+page may reflect sensitive typed text back into its visible content.
 
 Every top-level navigation, redirect, and HTTP(S) subresource is checked against
 resolved IP addresses. Loopback, private, link-local, reserved, multicast,
@@ -19,7 +26,13 @@ may load, but cannot be used as top-level navigation targets.
 
 Typed browser text is passed to the page but replaced with a character-count
 marker in terminal approval previews, SQLite tool executions, SQLite approval
-records, and lifecycle events. Downloads are disabled in this first release.
+records, and lifecycle events.
+
+Screenshots are stored under `~/.allpath-agent/browser-artifacts` with a 10 MB
+limit. Downloads are accepted only while an approved `browser_download` call is
+active, stored under `~/.allpath-agent/downloads`, limited to 25 MB, assigned a
+unique non-overwriting name, and created with owner-only permissions. Allpath
+does not accept an arbitrary output path from the model.
 
 Run `/browser` to inspect runtime readiness. The backend first uses an installed
 Google Chrome with Allpath's isolated profile and falls back to Playwright

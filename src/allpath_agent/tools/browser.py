@@ -5,9 +5,10 @@ import ipaddress
 import re
 import shutil
 import socket
+import uuid
 from collections.abc import Callable
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
@@ -28,7 +29,10 @@ MAX_SNAPSHOT_CHARS = 12_000
 MAX_PAGE_TEXT_CHARS = 8_000
 MAX_ELEMENTS = 80
 MAX_TYPED_CHARS = 10_000
+MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024
+MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
 _REF = re.compile(r"^e[1-9][0-9]{0,4}$")
+_SAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 _INTERNAL_HOST_SUFFIXES = (".localhost", ".local", ".internal")
 
 
@@ -44,6 +48,10 @@ class BrowserBackend(Protocol):
     def click(self, ref: str) -> dict[str, Any]: ...
 
     def type_text(self, ref: str, text: str) -> dict[str, Any]: ...
+
+    def screenshot(self, full_page: bool) -> dict[str, Any]: ...
+
+    def download(self, ref: str) -> dict[str, Any]: ...
 
     def close(self) -> None: ...
 
@@ -89,6 +97,13 @@ class BrowserService:
             raise BrowserAccessError("browser text exceeds the 10000 character limit")
         return self._backend.type_text(arguments["ref"], text)
 
+    def screenshot(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        return self._backend.screenshot(bool(arguments.get("full_page", False)))
+
+    def download(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        _validate_ref(arguments["ref"])
+        return self._backend.download(arguments["ref"])
+
     def close(self) -> None:
         self._backend.close()
 
@@ -98,17 +113,26 @@ class PlaywrightBrowserBackend:
         self,
         profile_dir: Path,
         *,
+        artifact_dir: Path | None = None,
+        download_dir: Path | None = None,
         timeout_ms: int = 30_000,
         resolver: Callable[..., list[tuple[Any, ...]]] = socket.getaddrinfo,
     ):
         if not PLAYWRIGHT_AVAILABLE:
             raise BrowserAccessError("Playwright is not installed")
         self._profile_dir = profile_dir.expanduser().resolve()
+        self._artifact_dir = (
+            artifact_dir or self._profile_dir.parent / "browser-artifacts"
+        ).expanduser().resolve()
+        self._download_dir = (
+            download_dir or self._profile_dir.parent / "downloads"
+        ).expanduser().resolve()
         self._timeout_ms = timeout_ms
         self._resolver = resolver
         self._playwright: Any = None
         self._context: Any = None
         self._page: Any = None
+        self._download_authorized = False
         atexit.register(self.close)
 
     def navigate(self, url: str) -> dict[str, Any]:
@@ -166,6 +190,57 @@ class PlaywrightBrowserBackend:
             "text_redacted": True,
         }
 
+    def screenshot(self, full_page: bool) -> dict[str, Any]:
+        page = self._require_page()
+        validate_public_url(page.url, self._resolver)
+        try:
+            payload = page.screenshot(full_page=full_page, type="png")
+        except PlaywrightError as error:
+            raise BrowserAccessError(f"browser screenshot failed: {str(error)[:240]}") from error
+        if len(payload) > MAX_SCREENSHOT_BYTES:
+            raise BrowserAccessError("browser screenshot exceeds the 10 MB limit")
+        self._prepare_private_directory(self._artifact_dir)
+        path = self._artifact_dir / f"screenshot-{uuid.uuid4().hex[:12]}.png"
+        path.write_bytes(payload)
+        path.chmod(0o600)
+        return {
+            "url": display_url(page.url),
+            "path": str(path),
+            "bytes": len(payload),
+            "full_page": full_page,
+        }
+
+    def download(self, ref: str) -> dict[str, Any]:
+        page = self._require_page()
+        locator = self._locator(page, ref)
+        self._download_authorized = True
+        try:
+            with page.expect_download(timeout=self._timeout_ms) as download_info:
+                locator.click(timeout=self._timeout_ms)
+            download = download_info.value
+            temporary_path = Path(download.path())
+            size = temporary_path.stat().st_size
+            if size > MAX_DOWNLOAD_BYTES:
+                download.cancel()
+                raise BrowserAccessError("browser download exceeds the 25 MB limit")
+            self._prepare_private_directory(self._download_dir)
+            filename = _safe_download_name(download.suggested_filename)
+            path = self._download_dir / f"{uuid.uuid4().hex[:8]}-{filename}"
+            download.save_as(path)
+            path.chmod(0o600)
+        except BrowserAccessError:
+            raise
+        except PlaywrightError as error:
+            raise BrowserAccessError(f"browser download failed: {str(error)[:240]}") from error
+        finally:
+            self._download_authorized = False
+        return {
+            "url": display_url(download.url),
+            "path": str(path),
+            "filename": filename,
+            "bytes": size,
+        }
+
     def close(self) -> None:
         if self._context is not None:
             try:
@@ -189,7 +264,7 @@ class PlaywrightBrowserBackend:
             launch_options = {
                 "user_data_dir": str(self._profile_dir),
                 "headless": True,
-                "accept_downloads": False,
+                "accept_downloads": True,
             }
             try:
                 self._context = self._playwright.chromium.launch_persistent_context(
@@ -209,6 +284,7 @@ class PlaywrightBrowserBackend:
                     ) from error
             self._context.set_default_timeout(self._timeout_ms)
             self._context.route("**/*", self._guard_request)
+            self._context.on("download", self._reject_unapproved_download)
             self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
         return self._page
 
@@ -238,6 +314,15 @@ class PlaywrightBrowserBackend:
             route.abort("blockedbyclient")
             return
         route.continue_()
+
+    def _reject_unapproved_download(self, download: Any) -> None:
+        if not self._download_authorized:
+            download.cancel()
+
+    @staticmethod
+    def _prepare_private_directory(path: Path) -> None:
+        path.mkdir(parents=True, exist_ok=True)
+        path.chmod(0o700)
 
 
 def create_browser_service(profile_dir: Path) -> BrowserService | None:
@@ -321,6 +406,33 @@ def register_browser_tools(registry: ToolRegistry, service: BrowserService) -> N
     )
     registry.register(
         ToolDefinition(
+            name="browser_screenshot",
+            description=(
+                "Save a PNG screenshot of the current public page in Allpath's private artifact "
+                "directory. File creation requires explicit approval."
+            ),
+            parameters=_object_schema(
+                {"full_page": {"type": "boolean"}},
+                (),
+            ),
+            handler=service.screenshot,
+            risk=ToolRisk.SIDE_EFFECT,
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="browser_download",
+            description=(
+                "Click one element ref that starts a download and save at most 25 MB in Allpath's "
+                "private download directory. Every download requires explicit approval."
+            ),
+            parameters=_object_schema({"ref": {"type": "string", "minLength": 2}}, ("ref",)),
+            handler=service.download,
+            risk=ToolRisk.SIDE_EFFECT,
+        )
+    )
+    registry.register(
+        ToolDefinition(
             name="browser_type",
             description=(
                 "Replace the text in one editable element ref. Every input requires approval and "
@@ -382,6 +494,12 @@ def display_url(url: str) -> str:
 def _validate_ref(ref: str) -> None:
     if not _REF.fullmatch(ref):
         raise BrowserAccessError("browser ref must look like e1 or e24")
+
+
+def _safe_download_name(suggested_filename: str) -> str:
+    name = Path(suggested_filename).name.strip().lstrip(".")
+    name = _SAFE_FILENAME.sub("-", name)[:120].strip(".-_")
+    return name or "download"
 
 
 def _system_chrome_path() -> str | None:

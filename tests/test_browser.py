@@ -49,6 +49,14 @@ class FakeBrowserBackend:
         self.calls.append(("type", ref, text))
         return {"ref": ref, "typed_characters": len(text), "text_redacted": True}
 
+    def screenshot(self, full_page: bool):
+        self.calls.append(("screenshot", full_page))
+        return {"path": "/private/artifacts/screenshot.png", "bytes": 100}
+
+    def download(self, ref: str):
+        self.calls.append(("download", ref))
+        return {"path": "/private/downloads/file.txt", "bytes": 100}
+
     def close(self):
         self.calls.append(("close",))
 
@@ -108,10 +116,19 @@ class BrowserSafetyTestCase(unittest.TestCase):
             context = ToolContext(session.id, "task-browser")
 
             names = {schema["function"]["name"] for schema in registry.schemas()}
-            expected = {"browser_navigate", "browser_snapshot", "browser_click", "browser_type"}
+            expected = {
+                "browser_navigate",
+                "browser_snapshot",
+                "browser_click",
+                "browser_type",
+                "browser_screenshot",
+                "browser_download",
+            }
             self.assertTrue(expected <= names)
             self.assertEqual(registry.get("browser_navigate").risk, ToolRisk.READ_ONLY)
             self.assertEqual(registry.get("browser_click").risk, ToolRisk.SIDE_EFFECT)
+            self.assertEqual(registry.get("browser_screenshot").risk, ToolRisk.SIDE_EFFECT)
+            self.assertEqual(registry.get("browser_download").risk, ToolRisk.SIDE_EFFECT)
 
             denied = ToolRuntime(registry, approvals, StaticApproval(False))
             with self.assertRaises(ToolApprovalDenied):
@@ -129,6 +146,17 @@ class BrowserSafetyTestCase(unittest.TestCase):
             serialized = str(records)
             self.assertNotIn("super-secret-password", serialized)
             self.assertIn("redacted browser text", serialized)
+
+            screenshot = allowed.execute(
+                "browser_screenshot",
+                {"full_page": True},
+                context,
+            )
+            download = allowed.execute("browser_download", {"ref": "e4"}, context)
+            self.assertEqual(screenshot["bytes"], 100)
+            self.assertEqual(download["bytes"], 100)
+            self.assertIn(("screenshot", True), backend.calls)
+            self.assertIn(("download", "e4"), backend.calls)
 
     def test_rejects_stale_or_invalid_refs_before_backend(self) -> None:
         backend = FakeBrowserBackend()

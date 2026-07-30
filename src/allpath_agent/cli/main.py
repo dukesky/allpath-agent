@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import subprocess
 import sys
 import time
 from collections.abc import Callable, Sequence
@@ -50,13 +51,17 @@ from allpath_agent.storage import (
 from allpath_agent.tools import (
     MCP_AVAILABLE,
     PLAYWRIGHT_AVAILABLE,
+    BrowserAccessError,
+    BrowserService,
     SkillCatalog,
     ToolRuntime,
     create_builtin_registry,
     create_browser_service,
     default_skill_roots,
+    diagnose_browser,
     discover_and_register_mcp_tools,
     load_mcp_config,
+    reset_browser_profile,
 )
 from allpath_agent.workflows import (
     ProviderConnectionWorkflow,
@@ -188,7 +193,16 @@ def _chat(
         session = sessions.create()
 
     chat_ui = TerminalChatUI(input_fn, output)
-    application = _build_application(home, database, demo, input_fn, output)
+    browser_profile = home / "browser-profile"
+    browser_service = create_browser_service(browser_profile)
+    application = _build_application(
+        home,
+        database,
+        demo,
+        input_fn,
+        output,
+        browser_service=browser_service,
+    )
     application.hooks.subscribe("*", chat_ui.handle_event)
     connection_workflow = ProviderConnectionWorkflow(
         home / "config.toml",
@@ -324,14 +338,24 @@ def _chat(
             _show_mcp(home, Path.cwd(), output)
             application.record_capability_tried("mcp_tools")
             continue
-        if user_message == "/browser":
-            state = "available" if PLAYWRIGHT_AVAILABLE else "missing"
-            output(f"Structured browser runtime: {state}")
-            output(f"Isolated profile: {home / 'browser-profile'}")
-            if PLAYWRIGHT_AVAILABLE:
-                output("Try: ask Allpath to open https://example.com and inspect the page.")
+        if user_message == "/browser" or user_message.startswith("/browser "):
+            action = user_message.removeprefix("/browser").strip() or "status"
+            if action == "status":
+                _show_browser_status(browser_profile, output)
+            elif action == "test":
+                _test_browser(browser_service, browser_profile, output, error_output)
+            elif action == "install":
+                _install_browser_runtime(chat_ui, output, error_output)
+            elif action == "reset":
+                _reset_browser(
+                    browser_service,
+                    browser_profile,
+                    chat_ui,
+                    output,
+                    error_output,
+                )
             else:
-                output("Install the full package dependencies, then restart Allpath Agent.")
+                error_output("Usage: /browser [status|test|install|reset]")
             application.record_capability_tried("browser_tasks")
             continue
         if user_message in {"/model", "/models current"}:
@@ -345,7 +369,14 @@ def _chat(
             elif action:
                 changed = _run_model_subcommand(home, action, output, error_output)
                 if changed:
-                    application = _build_application(home, database, False, input_fn, output)
+                    application = _build_application(
+                        home,
+                        database,
+                        False,
+                        input_fn,
+                        output,
+                        browser_service=browser_service,
+                    )
                     application.hooks.subscribe("*", chat_ui.handle_event)
                     application.start_session(active_session_id)
                 continue
@@ -374,13 +405,27 @@ def _chat(
                     continue
                 elif selected == 2:
                     if _select_role_reassignment(home, selector_fn, output, error_output):
-                        application = _build_application(home, database, False, input_fn, output)
+                        application = _build_application(
+                            home,
+                            database,
+                            False,
+                            input_fn,
+                            output,
+                            browser_service=browser_service,
+                        )
                         application.hooks.subscribe("*", chat_ui.handle_event)
                         application.start_session(active_session_id)
                     continue
                 elif selected == 3:
                     if _select_role_removal(home, selector_fn, output, error_output):
-                        application = _build_application(home, database, False, input_fn, output)
+                        application = _build_application(
+                            home,
+                            database,
+                            False,
+                            input_fn,
+                            output,
+                            browser_service=browser_service,
+                        )
                         application.hooks.subscribe("*", chat_ui.handle_event)
                         application.start_session(active_session_id)
                     continue
@@ -398,6 +443,11 @@ def _chat(
         expanded_skill = skill_catalog.expand_invocation(user_message)
         if expanded_skill is not None:
             user_message = expanded_skill
+
+        if _requests_browser_setup(user_message):
+            application.record_capability_tried("browser_tasks")
+            chat_ui.assistant(_browser_status_message(browser_profile), "setup")
+            continue
 
         if (
             _requests_telegram_setup(user_message)
@@ -508,6 +558,7 @@ def _chat(
                     False,
                     input_fn,
                     output,
+                    browser_service=browser_service,
                 )
                 application.hooks.subscribe("*", chat_ui.handle_event)
                 application.start_session(active_session_id)
@@ -605,6 +656,7 @@ def _build_application(
     input_fn: Callable[[str], str],
     output: Output,
     interactive_approvals: bool = True,
+    browser_service: BrowserService | None = None,
 ) -> AgentApplication:
     if demo:
         provider = ProviderPool.single(DemoProvider())
@@ -641,7 +693,7 @@ def _build_application(
         memories,
         (Path.cwd(),),
         default_skill_roots(home, Path.cwd()),
-        create_browser_service(home / "browser-profile"),
+        browser_service or create_browser_service(home / "browser-profile"),
     )
     discover_and_register_mcp_tools(
         registry,
@@ -699,6 +751,109 @@ def _show_mcp(home: Path, workspace: Path, output: Output) -> None:
     for server in servers:
         state = "enabled" if server.enabled else "disabled"
         output(f"{server.name:<20} {state:<8} {server.command} {' '.join(server.args)}")
+
+
+def _show_browser_status(profile: Path, output: Output) -> None:
+    diagnostics = diagnose_browser(profile)
+    output(f"Structured browser runtime: {'ready' if diagnostics.ready else 'not ready'}")
+    output(f"Playwright package: {'available' if diagnostics.playwright else 'missing'}")
+    output(f"System Chrome: {diagnostics.system_chrome or 'not found'}")
+    output(f"Playwright Chromium: {diagnostics.bundled_chromium or 'not installed'}")
+    output(f"Isolated profile: {profile} ({'created' if diagnostics.profile_exists else 'not created yet'})")
+    output(f"Next: {diagnostics.next_action}")
+
+
+def _browser_status_message(profile: Path) -> str:
+    diagnostics = diagnose_browser(profile)
+    state = "ready" if diagnostics.ready else "not ready"
+    return (
+        f"Structured browser is {state}.\n"
+        f"Playwright: {'available' if diagnostics.playwright else 'missing'}\n"
+        f"System Chrome: {diagnostics.system_chrome or 'not found'}\n"
+        f"Playwright Chromium: {diagnostics.bundled_chromium or 'not installed'}\n"
+        f"Isolated profile: {profile}\n"
+        f"Next: {diagnostics.next_action}"
+    )
+
+
+def _test_browser(
+    service: BrowserService | None,
+    profile: Path,
+    output: Output,
+    error_output: Output,
+) -> None:
+    diagnostics = diagnose_browser(profile)
+    if service is None or not diagnostics.ready:
+        error_output(f"Browser test cannot start. {diagnostics.next_action}")
+        return
+    try:
+        snapshot = service.navigate({"url": "https://example.com"})
+    except BrowserAccessError as error:
+        error_output(f"Browser test failed: {error}")
+        return
+    output(f"Browser test passed: {snapshot['title']} ({snapshot['url']})")
+    output(f"Structured elements: {len(snapshot['elements'])}")
+
+
+def _install_browser_runtime(
+    chat_ui: TerminalChatUI,
+    output: Output,
+    error_output: Output,
+) -> None:
+    if not PLAYWRIGHT_AVAILABLE:
+        error_output("Playwright package is missing. Reinstall the full Allpath package first.")
+        return
+    command = [sys.executable, "-m", "playwright", "install", "chromium"]
+    try:
+        answer = chat_ui.request_confirmation(
+            "browser_install",
+            "Download Playwright Chromium for Allpath's isolated browser.",
+            "Command: " + " ".join(command),
+        ).lower()
+    except (EOFError, KeyboardInterrupt):
+        output("")
+        error_output("Browser installation cancelled.")
+        return
+    if answer not in {"y", "yes"}:
+        output("Browser installation cancelled.")
+        return
+    try:
+        completed = subprocess.run(command, check=False)
+    except OSError as error:
+        error_output(f"Browser installation failed to start: {error}")
+        return
+    if completed.returncode == 0:
+        output("Playwright Chromium installed. Run /browser test next.")
+    else:
+        error_output(f"Browser installation failed with exit code {completed.returncode}.")
+
+
+def _reset_browser(
+    service: BrowserService | None,
+    profile: Path,
+    chat_ui: TerminalChatUI,
+    output: Output,
+    error_output: Output,
+) -> None:
+    try:
+        answer = chat_ui.request_confirmation(
+            "browser_reset",
+            "Delete Allpath's isolated browser cookies, storage, and session data.",
+            f"Profile: {profile}",
+        ).lower()
+    except (EOFError, KeyboardInterrupt):
+        output("")
+        error_output("Browser reset cancelled.")
+        return
+    if answer not in {"y", "yes"}:
+        output("Browser reset cancelled.")
+        return
+    try:
+        removed = reset_browser_profile(profile, service)
+    except (OSError, BrowserAccessError) as error:
+        error_output(f"Browser reset failed: {error}")
+        return
+    output("Browser profile reset." if removed else "Browser profile does not exist yet.")
 
 
 def _list_sessions(sessions: SessionRepository, limit: int, output: Output) -> int:
@@ -776,6 +931,17 @@ def _requests_whatsapp_setup(message: str) -> bool:
     lowered = message.lower()
     return "whatsapp" in lowered and any(
         phrase in lowered for phrase in ("connect", "setup", "set up", "连接", "配置", "设置")
+    )
+
+
+def _requests_browser_setup(message: str) -> bool:
+    lowered = message.lower()
+    return (
+        "browser" in lowered
+        and any(phrase in lowered for phrase in ("connect", "setup", "set up", "status"))
+    ) or (
+        "浏览器" in lowered
+        and any(phrase in lowered for phrase in ("连接", "配置", "设置", "状态"))
     )
 
 

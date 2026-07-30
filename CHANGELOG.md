@@ -9,6 +9,7 @@ The format follows Keep a Changelog conventions. During development, changes acc
 ### Added
 
 - Added the first structured browser core with an isolated Chrome/Chromium profile, public-network URL enforcement, bounded snapshots, stable element refs, and approval-gated click/type actions with typed-text audit redaction.
+- Added self-service browser diagnostics, real navigation testing, approved Chromium installation, isolated-profile reset, and natural-language setup guidance.
 
 ## [0.2.0] - 2026-07-29
 

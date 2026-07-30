@@ -28,3 +28,13 @@ Chromium. If neither is available, install Chromium with:
 ```bash
 python -m playwright install chromium
 ```
+
+The complete self-service command surface is:
+
+- `/browser` or `/browser status` — inspect package, browser, and profile readiness.
+- `/browser test` — open Example Domain and verify a structured snapshot.
+- `/browser install` — request approval, then download Playwright Chromium in the terminal.
+- `/browser reset` — request approval, close the session, and remove only Allpath's profile.
+
+You can also say `setup browser`, `connect browser`, `配置浏览器`, or `浏览器状态`
+in normal conversation. Allpath responds with the same diagnosis and exact next action.

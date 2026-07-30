@@ -17,12 +17,14 @@ from allpath_agent.storage import (
 )
 from allpath_agent.tools import (
     BrowserAccessError,
+    BrowserDiagnostics,
     BrowserService,
     ToolApprovalDenied,
     ToolContext,
     ToolRisk,
     ToolRuntime,
     create_builtin_registry,
+    reset_browser_profile,
     validate_public_url,
 )
 
@@ -47,6 +49,9 @@ class FakeBrowserBackend:
         self.calls.append(("type", ref, text))
         return {"ref": ref, "typed_characters": len(text), "text_redacted": True}
 
+    def close(self):
+        self.calls.append(("close",))
+
 
 class StaticApproval:
     def __init__(self, allowed: bool):
@@ -61,6 +66,17 @@ def public_resolver(host: str, port: int):
 
 
 class BrowserSafetyTestCase(unittest.TestCase):
+    def test_diagnostics_explains_each_readiness_state(self) -> None:
+        missing_package = BrowserDiagnostics(False, None, None, False)
+        missing_browser = BrowserDiagnostics(True, None, None, False)
+        ready = BrowserDiagnostics(True, "/Applications/Chrome", None, True)
+
+        self.assertFalse(missing_package.ready)
+        self.assertIn("full Allpath package", missing_package.next_action)
+        self.assertIn("/browser install", missing_browser.next_action)
+        self.assertTrue(ready.ready)
+        self.assertIn("/browser test", ready.next_action)
+
     def test_public_url_validation_blocks_local_private_credentials_and_schemes(self) -> None:
         self.assertEqual(
             validate_public_url("https://example.com/path", public_resolver),
@@ -164,6 +180,23 @@ class BrowserSafetyTestCase(unittest.TestCase):
 
         self.assertNotIn("another-private-value", serialized)
         self.assertIn("redacted browser text", serialized)
+
+    def test_reset_closes_service_and_removes_only_isolated_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile = root / "browser-profile"
+            profile.mkdir()
+            (profile / "Cookies").write_text("isolated", encoding="utf-8")
+            unrelated = root / "keep.txt"
+            unrelated.write_text("keep", encoding="utf-8")
+            backend = FakeBrowserBackend()
+
+            removed = reset_browser_profile(profile, BrowserService(backend))
+
+            self.assertTrue(removed)
+            self.assertFalse(profile.exists())
+            self.assertEqual(unrelated.read_text(encoding="utf-8"), "keep")
+            self.assertIn(("close",), backend.calls)
 
 
 if __name__ == "__main__":

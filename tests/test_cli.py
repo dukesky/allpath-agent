@@ -184,9 +184,34 @@ class CliEndToEndTestCase(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Structured browser runtime:", result.stdout)
+        self.assertIn("Playwright package:", result.stdout)
+        self.assertIn("System Chrome:", result.stdout)
+        self.assertIn("Next:", result.stdout)
         self.assertIn("Isolated profile:", result.stdout)
         self.assertIsNotNone(progress)
         self.assertEqual(progress.status, "tried")
+
+    def test_natural_browser_setup_request_returns_diagnostics_without_model(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = run_cli(Path(directory), "setup browser\n/exit\n", "--demo")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ALLPATH · SETUP", result.stdout)
+        self.assertIn("Structured browser is", result.stdout)
+        self.assertIn("Isolated profile:", result.stdout)
+
+    def test_browser_reset_requires_confirmation_and_deletes_isolated_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            profile = home / "browser-profile"
+            profile.mkdir()
+            (profile / "Cookies").write_text("isolated", encoding="utf-8")
+            result = run_cli(home, "/browser reset\ny\n/exit\n", "--demo")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("APPROVAL · browser_reset", result.stdout)
+        self.assertIn("Browser profile reset.", result.stdout)
+        self.assertFalse(profile.exists())
 
     def test_starter_conversation_introduces_provider_setup_on_request(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

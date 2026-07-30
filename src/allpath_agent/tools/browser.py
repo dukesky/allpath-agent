@@ -3,9 +3,11 @@ from __future__ import annotations
 import atexit
 import ipaddress
 import re
+import shutil
 import socket
 from collections.abc import Callable
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
@@ -43,6 +45,28 @@ class BrowserBackend(Protocol):
 
     def type_text(self, ref: str, text: str) -> dict[str, Any]: ...
 
+    def close(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class BrowserDiagnostics:
+    playwright: bool
+    system_chrome: str | None
+    bundled_chromium: str | None
+    profile_exists: bool
+
+    @property
+    def ready(self) -> bool:
+        return self.playwright and bool(self.system_chrome or self.bundled_chromium)
+
+    @property
+    def next_action(self) -> str:
+        if not self.playwright:
+            return "Install the full Allpath package dependencies, then restart the Agent."
+        if not self.system_chrome and not self.bundled_chromium:
+            return "Run /browser install to download isolated Playwright Chromium."
+        return "Run /browser test or ask Allpath to inspect a public website."
+
 
 class BrowserService:
     def __init__(self, backend: BrowserBackend):
@@ -64,6 +88,9 @@ class BrowserService:
         if len(text) > MAX_TYPED_CHARS:
             raise BrowserAccessError("browser text exceeds the 10000 character limit")
         return self._backend.type_text(arguments["ref"], text)
+
+    def close(self) -> None:
+        self._backend.close()
 
 
 class PlaywrightBrowserBackend:
@@ -157,6 +184,7 @@ class PlaywrightBrowserBackend:
     def _ensure_page(self):
         if self._context is None:
             self._profile_dir.mkdir(parents=True, exist_ok=True)
+            self._profile_dir.chmod(0o700)
             self._playwright = sync_playwright().start()
             launch_options = {
                 "user_data_dir": str(self._profile_dir),
@@ -216,6 +244,47 @@ def create_browser_service(profile_dir: Path) -> BrowserService | None:
     if not PLAYWRIGHT_AVAILABLE:
         return None
     return BrowserService(PlaywrightBrowserBackend(profile_dir))
+
+
+def diagnose_browser(profile_dir: Path) -> BrowserDiagnostics:
+    chrome = _system_chrome_path()
+    bundled = None
+    if PLAYWRIGHT_AVAILABLE:
+        playwright = None
+        try:
+            playwright = sync_playwright().start()
+            candidate = Path(playwright.chromium.executable_path).expanduser()
+            if candidate.is_file():
+                bundled = str(candidate)
+        except Exception:
+            bundled = None
+        finally:
+            if playwright is not None:
+                try:
+                    playwright.stop()
+                except Exception:
+                    pass
+    return BrowserDiagnostics(
+        playwright=PLAYWRIGHT_AVAILABLE,
+        system_chrome=chrome,
+        bundled_chromium=bundled,
+        profile_exists=profile_dir.expanduser().exists(),
+    )
+
+
+def reset_browser_profile(profile_dir: Path, service: BrowserService | None = None) -> bool:
+    if service is not None:
+        service.close()
+    path = profile_dir.expanduser()
+    if path.is_symlink():
+        path.unlink()
+        return True
+    if not path.exists():
+        return False
+    if not path.is_dir():
+        raise BrowserAccessError("browser profile path is not a directory")
+    shutil.rmtree(path)
+    return True
 
 
 def register_browser_tools(registry: ToolRegistry, service: BrowserService) -> None:
@@ -313,6 +382,22 @@ def display_url(url: str) -> str:
 def _validate_ref(ref: str) -> None:
     if not _REF.fullmatch(ref):
         raise BrowserAccessError("browser ref must look like e1 or e24")
+
+
+def _system_chrome_path() -> str | None:
+    candidates = (
+        shutil.which("google-chrome"),
+        shutil.which("google-chrome-stable"),
+        shutil.which("chrome"),
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        str(Path.home() / "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    )
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return str(Path(candidate))
+    return None
 
 
 def _object_schema(properties: dict[str, Any], required: tuple[str, ...]) -> dict[str, Any]:

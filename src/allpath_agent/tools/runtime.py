@@ -6,6 +6,7 @@ from typing import Any, Protocol
 from allpath_agent.storage import ToolApprovalRepository
 
 from .contracts import ToolContext
+from .redaction import redact_tool_arguments
 from .registry import ToolRegistry, ToolRisk
 
 
@@ -55,7 +56,7 @@ class ToolRuntime:
                 context.session_id,
                 context.task_id,
                 name,
-                arguments,
+                redact_tool_arguments(name, arguments),
                 decision,
                 reason,
             )

@@ -105,6 +105,7 @@ class AgentApplication:
             "terminal": "terminal_tasks",
             "skill": "skills",
             "mcp": "mcp_tools",
+            "browser": "browser_tasks",
         }
         for intent, capability_id in intent_capabilities.items():
             if intent in intents:
@@ -129,6 +130,10 @@ class AgentApplication:
             "terminal": "terminal_tasks",
             "skills_list": "skills",
             "skill_view": "skills",
+            "browser_navigate": "browser_tasks",
+            "browser_snapshot": "browser_tasks",
+            "browser_click": "browser_tasks",
+            "browser_type": "browser_tasks",
         }
         for execution in self._tool_executions.list_for_task(session_id, task_id):
             if execution["status"] == "succeeded" and execution["tool_name"] in tool_capabilities:
@@ -164,6 +169,12 @@ def analyze_task(message: str) -> TaskSignals:
         "执行命令",
         "运行测试",
         "终端",
+        "browser",
+        "browse website",
+        "open website",
+        "浏览器",
+        "浏览网页",
+        "打开网站",
     )
     return TaskSignals(
         estimated_tool_calls=1 if any(phrase in lowered for phrase in tool_phrases) else 0,
@@ -260,6 +271,16 @@ def detect_intents(message: str) -> set[str]:
             "mcp",
             "model context protocol",
             "工具服务器",
+        ),
+        "browser": (
+            "browser",
+            "browse website",
+            "open website",
+            "click website",
+            "浏览器",
+            "浏览网页",
+            "打开网站",
+            "点击网页",
         ),
     }
     for intent, phrases in mappings.items():

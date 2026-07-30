@@ -124,4 +124,13 @@ def default_capabilities() -> list[Capability]:
             setup_effort=20,
             lesson="Use /mcp to inspect configured tool servers; MCP actions share Allpath's approval boundary.",
         ),
+        Capability(
+            id="browser_tasks",
+            title="Structured browser tasks",
+            base_priority=42,
+            prerequisite_ids=("live_provider",),
+            trigger_intents=frozenset({"browser"}),
+            setup_effort=10,
+            lesson="Use /browser to inspect readiness, then ask Allpath to open and inspect a public website.",
+        ),
     ]

@@ -115,7 +115,8 @@ class CurriculumServiceTestCase(unittest.TestCase):
 
     def test_catalog_exposes_current_capabilities(self) -> None:
         rows = self.service.list_progress()
-        self.assertEqual(len(rows), 14)
+        self.assertEqual(len(rows), 15)
+        self.assertIn("browser_tasks", {capability_id for capability_id, _, _ in rows})
         self.assertTrue(all(status == "unseen" for _, _, status in rows))
 
     def test_success_evidence_prevents_reteaching_used_capability(self) -> None:

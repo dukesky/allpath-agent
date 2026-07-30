@@ -49,9 +49,11 @@ from allpath_agent.storage import (
 )
 from allpath_agent.tools import (
     MCP_AVAILABLE,
+    PLAYWRIGHT_AVAILABLE,
     SkillCatalog,
     ToolRuntime,
     create_builtin_registry,
+    create_browser_service,
     default_skill_roots,
     discover_and_register_mcp_tools,
     load_mcp_config,
@@ -267,7 +269,7 @@ def _chat(
             output(
                 "Commands: /help, /new, /sessions, /resume <session-id>, "
                 "/model, /models, /route, /connectors, /capabilities, "
-                "/automations, /skills, /mcp, /dismiss [capability-id], /exit"
+                "/automations, /skills, /mcp, /browser, /dismiss [capability-id], /exit"
             )
             continue
         if user_message.startswith("/help "):
@@ -321,6 +323,16 @@ def _chat(
         if user_message == "/mcp":
             _show_mcp(home, Path.cwd(), output)
             application.record_capability_tried("mcp_tools")
+            continue
+        if user_message == "/browser":
+            state = "available" if PLAYWRIGHT_AVAILABLE else "missing"
+            output(f"Structured browser runtime: {state}")
+            output(f"Isolated profile: {home / 'browser-profile'}")
+            if PLAYWRIGHT_AVAILABLE:
+                output("Try: ask Allpath to open https://example.com and inspect the page.")
+            else:
+                output("Install the full package dependencies, then restart Allpath Agent.")
+            application.record_capability_tried("browser_tasks")
             continue
         if user_message in {"/model", "/models current"}:
             _show_current_model(home, database, active_session_id, output)
@@ -629,6 +641,7 @@ def _build_application(
         memories,
         (Path.cwd(),),
         default_skill_roots(home, Path.cwd()),
+        create_browser_service(home / "browser-profile"),
     )
     discover_and_register_mcp_tools(
         registry,

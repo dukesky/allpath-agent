@@ -15,6 +15,7 @@ from allpath_agent.observability import EventLogger, NullEventLogger
 from allpath_agent.storage import MessageRepository, ToolExecutionRepository
 from allpath_agent.storage.records import MessageRecord
 from allpath_agent.tools import ToolContext, ToolExecutor
+from allpath_agent.tools.redaction import redact_tool_arguments
 
 from .budget import BudgetTracker, TaskBudget
 
@@ -286,7 +287,7 @@ class AgentLoop:
             session_id,
             task_id,
             tool_call.name,
-            tool_call.arguments,
+            redact_tool_arguments(tool_call.name, tool_call.arguments),
         )
         self._events.emit(
             "tool_call_started",

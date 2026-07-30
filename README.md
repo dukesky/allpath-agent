@@ -49,7 +49,7 @@ The same progress also shapes the launch card: completed, habitual, and
 dismissed lessons are skipped so startup guidance advances with the user rather
 than repeating a permanent tutorial.
 
-The current curriculum contains fourteen implemented capabilities. Suggestions appear only after the current answer, at most once per session. Recent suggestions receive a cross-session cooldown, successful actions advance progress automatically, and `/dismiss` suppresses unwanted lessons.
+The current curriculum contains fifteen implemented capabilities. Suggestions appear only after the current answer, at most once per session. Recent suggestions receive a cross-session cooldown, successful actions advance progress automatically, and `/dismiss` suppresses unwanted lessons.
 
 Examples:
 

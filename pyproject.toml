@@ -7,7 +7,7 @@ name = "allpath-agent"
 version = "0.2.0"
 description = "A small personal agent with progressive capability discovery and model routing"
 requires-python = ">=3.11"
-dependencies = ["slack_sdk>=3.0,<4", "mcp>=1,<2"]
+dependencies = ["slack_sdk>=3.0,<4", "mcp>=1,<2", "playwright>=1.60,<2"]
 
 [project.scripts]
 allpath-agent = "allpath_agent.cli.main:main"

@@ -175,6 +175,19 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertIsNotNone(progress)
         self.assertEqual(progress.status, "tried")
 
+    def test_browser_command_reports_runtime_and_records_curriculum_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            result = run_cli(home, "/browser\n/exit\n", "--demo")
+            database = Database(home / "state.db")
+            progress = CapabilityProgressRepository(database).get("browser_tasks")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Structured browser runtime:", result.stdout)
+        self.assertIn("Isolated profile:", result.stdout)
+        self.assertIsNotNone(progress)
+        self.assertEqual(progress.status, "tried")
+
     def test_starter_conversation_introduces_provider_setup_on_request(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             result = run_cli(

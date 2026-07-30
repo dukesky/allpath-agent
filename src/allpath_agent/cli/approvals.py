@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 
 from allpath_agent.tools import ApprovalRequest
+from allpath_agent.tools.redaction import redact_tool_arguments
 
 from .render import TerminalChatUI
 
@@ -20,7 +21,7 @@ class TerminalApprovalHandler:
 
     def request(self, approval: ApprovalRequest) -> tuple[bool, str | None]:
         details = json.dumps(
-            _approval_preview(approval.arguments),
+            _approval_preview(redact_tool_arguments(approval.tool_name, approval.arguments)),
             ensure_ascii=False,
             indent=2,
             sort_keys=True,

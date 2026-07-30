@@ -1,4 +1,12 @@
 from .builtin import create_builtin_registry
+from .browser import (
+    PLAYWRIGHT_AVAILABLE,
+    BrowserAccessError,
+    BrowserService,
+    create_browser_service,
+    register_browser_tools,
+    validate_public_url,
+)
 from .contracts import ToolContext, ToolExecutor
 from .registry import ToolDefinition, ToolRegistry, ToolRisk
 from .runtime import (
@@ -42,4 +50,10 @@ __all__ = [
     "WorkspaceAccessError",
     "register_workspace_tools",
     "create_builtin_registry",
+    "PLAYWRIGHT_AVAILABLE",
+    "BrowserAccessError",
+    "BrowserService",
+    "create_browser_service",
+    "register_browser_tools",
+    "validate_public_url",
 ]

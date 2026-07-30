@@ -1,0 +1,380 @@
+from __future__ import annotations
+
+import atexit
+import ipaddress
+import re
+import socket
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any, Protocol
+from urllib.parse import urlsplit, urlunsplit
+
+from .registry import ToolDefinition, ToolRegistry, ToolRisk
+
+try:
+    from playwright.sync_api import Error as PlaywrightError
+    from playwright.sync_api import sync_playwright
+
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:  # pragma: no cover - depends on optional runtime package
+    PlaywrightError = RuntimeError
+    sync_playwright = None
+    PLAYWRIGHT_AVAILABLE = False
+
+
+MAX_SNAPSHOT_CHARS = 12_000
+MAX_PAGE_TEXT_CHARS = 8_000
+MAX_ELEMENTS = 80
+MAX_TYPED_CHARS = 10_000
+_REF = re.compile(r"^e[1-9][0-9]{0,4}$")
+_INTERNAL_HOST_SUFFIXES = (".localhost", ".local", ".internal")
+
+
+class BrowserAccessError(RuntimeError):
+    pass
+
+
+class BrowserBackend(Protocol):
+    def navigate(self, url: str) -> dict[str, Any]: ...
+
+    def snapshot(self) -> dict[str, Any]: ...
+
+    def click(self, ref: str) -> dict[str, Any]: ...
+
+    def type_text(self, ref: str, text: str) -> dict[str, Any]: ...
+
+
+class BrowserService:
+    def __init__(self, backend: BrowserBackend):
+        self._backend = backend
+
+    def navigate(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        return self._backend.navigate(arguments["url"])
+
+    def snapshot(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        return self._backend.snapshot()
+
+    def click(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        _validate_ref(arguments["ref"])
+        return self._backend.click(arguments["ref"])
+
+    def type_text(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        _validate_ref(arguments["ref"])
+        text = arguments["text"]
+        if len(text) > MAX_TYPED_CHARS:
+            raise BrowserAccessError("browser text exceeds the 10000 character limit")
+        return self._backend.type_text(arguments["ref"], text)
+
+
+class PlaywrightBrowserBackend:
+    def __init__(
+        self,
+        profile_dir: Path,
+        *,
+        timeout_ms: int = 30_000,
+        resolver: Callable[..., list[tuple[Any, ...]]] = socket.getaddrinfo,
+    ):
+        if not PLAYWRIGHT_AVAILABLE:
+            raise BrowserAccessError("Playwright is not installed")
+        self._profile_dir = profile_dir.expanduser().resolve()
+        self._timeout_ms = timeout_ms
+        self._resolver = resolver
+        self._playwright: Any = None
+        self._context: Any = None
+        self._page: Any = None
+        atexit.register(self.close)
+
+    def navigate(self, url: str) -> dict[str, Any]:
+        validated = validate_public_url(url, self._resolver)
+        page = self._ensure_page()
+        try:
+            page.goto(validated, wait_until="domcontentloaded", timeout=self._timeout_ms)
+        except PlaywrightError as error:
+            raise BrowserAccessError(f"browser navigation failed: {str(error)[:240]}") from error
+        validate_public_url(page.url, self._resolver)
+        return self.snapshot()
+
+    def snapshot(self) -> dict[str, Any]:
+        page = self._require_page()
+        validate_public_url(page.url, self._resolver)
+        try:
+            raw = page.evaluate(_SNAPSHOT_SCRIPT, {"maxElements": MAX_ELEMENTS})
+        except PlaywrightError as error:
+            raise BrowserAccessError(f"browser snapshot failed: {str(error)[:240]}") from error
+        result = {
+            "url": display_url(page.url),
+            "title": str(raw.get("title", ""))[:500],
+            "text": str(raw.get("text", ""))[:MAX_PAGE_TEXT_CHARS],
+            "elements": list(raw.get("elements", ()))[:MAX_ELEMENTS],
+            "truncated": bool(raw.get("truncated")),
+        }
+        if len(str(result)) > MAX_SNAPSHOT_CHARS:
+            result["text"] = result["text"][:2_000]
+            result["truncated"] = True
+        return result
+
+    def click(self, ref: str) -> dict[str, Any]:
+        page = self._require_page()
+        locator = self._locator(page, ref)
+        try:
+            locator.click(timeout=self._timeout_ms)
+            if self._context.pages:
+                self._page = self._context.pages[-1]
+            validate_public_url(self._page.url, self._resolver)
+        except PlaywrightError as error:
+            raise BrowserAccessError(f"browser click failed: {str(error)[:240]}") from error
+        return self.snapshot()
+
+    def type_text(self, ref: str, text: str) -> dict[str, Any]:
+        page = self._require_page()
+        locator = self._locator(page, ref)
+        try:
+            locator.fill(text, timeout=self._timeout_ms)
+        except PlaywrightError as error:
+            raise BrowserAccessError(f"browser typing failed: {str(error)[:240]}") from error
+        return {
+            "url": display_url(page.url),
+            "ref": ref,
+            "typed_characters": len(text),
+            "text_redacted": True,
+        }
+
+    def close(self) -> None:
+        if self._context is not None:
+            try:
+                self._context.close()
+            except Exception:
+                pass
+            self._context = None
+            self._page = None
+        if self._playwright is not None:
+            try:
+                self._playwright.stop()
+            except Exception:
+                pass
+            self._playwright = None
+
+    def _ensure_page(self):
+        if self._context is None:
+            self._profile_dir.mkdir(parents=True, exist_ok=True)
+            self._playwright = sync_playwright().start()
+            launch_options = {
+                "user_data_dir": str(self._profile_dir),
+                "headless": True,
+                "accept_downloads": False,
+            }
+            try:
+                self._context = self._playwright.chromium.launch_persistent_context(
+                    channel="chrome",
+                    **launch_options,
+                )
+            except PlaywrightError:
+                try:
+                    self._context = self._playwright.chromium.launch_persistent_context(
+                        **launch_options,
+                    )
+                except PlaywrightError as error:
+                    self.close()
+                    raise BrowserAccessError(
+                        "No supported browser is available. Install Google Chrome or run "
+                        "'python -m playwright install chromium'."
+                    ) from error
+            self._context.set_default_timeout(self._timeout_ms)
+            self._context.route("**/*", self._guard_request)
+            self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
+        return self._page
+
+    def _require_page(self):
+        if self._page is None:
+            raise BrowserAccessError("no browser session; call browser_navigate first")
+        return self._page
+
+    def _locator(self, page: Any, ref: str):
+        _validate_ref(ref)
+        locator = page.locator(f'[data-allpath-ref="{ref}"]')
+        if locator.count() != 1:
+            raise BrowserAccessError(
+                f"browser ref {ref} is stale or missing; call browser_snapshot again"
+            )
+        return locator
+
+    def _guard_request(self, route: Any) -> None:
+        url = route.request.url
+        scheme = urlsplit(url).scheme.lower()
+        if scheme in {"about", "blob", "data"}:
+            route.continue_()
+            return
+        try:
+            validate_public_url(url, self._resolver)
+        except BrowserAccessError:
+            route.abort("blockedbyclient")
+            return
+        route.continue_()
+
+
+def create_browser_service(profile_dir: Path) -> BrowserService | None:
+    if not PLAYWRIGHT_AVAILABLE:
+        return None
+    return BrowserService(PlaywrightBrowserBackend(profile_dir))
+
+
+def register_browser_tools(registry: ToolRegistry, service: BrowserService) -> None:
+    registry.register(
+        ToolDefinition(
+            name="browser_navigate",
+            description=(
+                "Open a public HTTP(S) URL in Allpath's isolated browser profile and return a "
+                "structured snapshot with stable element refs. Private and local networks are blocked."
+            ),
+            parameters=_object_schema({"url": {"type": "string", "minLength": 1}}, ("url",)),
+            handler=service.navigate,
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="browser_snapshot",
+            description="Refresh the current structured browser snapshot and stable element refs.",
+            parameters=_object_schema({}, ()),
+            handler=service.snapshot,
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="browser_click",
+            description=(
+                "Click one element ref from the latest browser snapshot. Every click requires "
+                "explicit approval in this safety-first MVP."
+            ),
+            parameters=_object_schema({"ref": {"type": "string", "minLength": 2}}, ("ref",)),
+            handler=service.click,
+            risk=ToolRisk.SIDE_EFFECT,
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="browser_type",
+            description=(
+                "Replace the text in one editable element ref. Every input requires approval and "
+                "the text is redacted from audit records and terminal previews."
+            ),
+            parameters=_object_schema(
+                {
+                    "ref": {"type": "string", "minLength": 2},
+                    "text": {"type": "string"},
+                },
+                ("ref", "text"),
+            ),
+            handler=service.type_text,
+            risk=ToolRisk.SIDE_EFFECT,
+        )
+    )
+
+
+def validate_public_url(
+    url: str,
+    resolver: Callable[..., list[tuple[Any, ...]]] = socket.getaddrinfo,
+) -> str:
+    if len(url) > 2_048:
+        raise BrowserAccessError("browser URL exceeds the 2048 character limit")
+    parsed = urlsplit(url)
+    if parsed.scheme.lower() not in {"http", "https"}:
+        raise BrowserAccessError("browser URL must use http or https")
+    if parsed.username or parsed.password:
+        raise BrowserAccessError("browser URL must not contain credentials")
+    hostname = (parsed.hostname or "").rstrip(".").lower()
+    if not hostname:
+        raise BrowserAccessError("browser URL requires a hostname")
+    if hostname == "localhost" or hostname.endswith(_INTERNAL_HOST_SUFFIXES):
+        raise BrowserAccessError("browser URL points to a local or internal hostname")
+    try:
+        addresses = [ipaddress.ip_address(hostname)]
+    except ValueError:
+        try:
+            info = resolver(hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
+        except OSError as error:
+            raise BrowserAccessError(f"browser hostname could not be resolved: {hostname}") from error
+        addresses = []
+        for item in info:
+            address = item[4][0]
+            try:
+                addresses.append(ipaddress.ip_address(address))
+            except ValueError:
+                continue
+    if not addresses or any(not address.is_global for address in addresses):
+        raise BrowserAccessError("browser URL resolves to a private or non-public address")
+    return url
+
+
+def display_url(url: str) -> str:
+    parsed = urlsplit(url)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+
+
+def _validate_ref(ref: str) -> None:
+    if not _REF.fullmatch(ref):
+        raise BrowserAccessError("browser ref must look like e1 or e24")
+
+
+def _object_schema(properties: dict[str, Any], required: tuple[str, ...]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(required),
+        "additionalProperties": False,
+    }
+
+
+_SNAPSHOT_SCRIPT = r"""
+({maxElements}) => {
+  window.__allpathRefCounter = window.__allpathRefCounter || 0;
+  const selector = [
+    'a[href]', 'button', 'input', 'textarea', 'select', 'summary',
+    '[role="button"]', '[role="link"]', '[role="checkbox"]',
+    '[role="radio"]', '[role="tab"]', '[contenteditable="true"]'
+  ].join(',');
+  const visible = (element) => {
+    const style = window.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+  };
+  const roleFor = (element) => {
+    if (element.getAttribute('role')) return element.getAttribute('role');
+    const tag = element.tagName.toLowerCase();
+    if (tag === 'a') return 'link';
+    if (tag === 'button') return 'button';
+    if (tag === 'textarea') return 'textbox';
+    if (tag === 'select') return 'combobox';
+    if (tag === 'input') return element.type || 'textbox';
+    return tag;
+  };
+  const safeHref = (element) => {
+    if (!element.href) return null;
+    try {
+      const url = new URL(element.href, document.baseURI);
+      return `${url.origin}${url.pathname}`;
+    } catch (_) { return null; }
+  };
+  const candidates = Array.from(document.querySelectorAll(selector)).filter(visible);
+  const elements = candidates.slice(0, maxElements).map((element) => {
+    if (!element.dataset.allpathRef) {
+      window.__allpathRefCounter += 1;
+      element.dataset.allpathRef = `e${window.__allpathRefCounter}`;
+    }
+    const name = element.getAttribute('aria-label') || element.innerText ||
+      element.getAttribute('placeholder') || element.getAttribute('title') || '';
+    return {
+      ref: element.dataset.allpathRef,
+      role: roleFor(element),
+      name: String(name).replace(/\s+/g, ' ').trim().slice(0, 240),
+      href: safeHref(element),
+      disabled: Boolean(element.disabled || element.getAttribute('aria-disabled') === 'true')
+    };
+  });
+  return {
+    title: document.title || '',
+    text: String(document.body?.innerText || '').slice(0, 8000),
+    elements,
+    truncated: candidates.length > maxElements || String(document.body?.innerText || '').length > 8000
+  };
+}
+"""

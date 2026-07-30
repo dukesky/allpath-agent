@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from allpath_agent.storage import MemoryRepository
 
 from .registry import ToolDefinition, ToolRegistry, ToolRisk
+from .browser import BrowserService, register_browser_tools
 from .skills import register_skill_tools
 from .terminal import register_terminal_tool
 from .workspace import register_workspace_tools
@@ -20,6 +21,7 @@ def create_builtin_registry(
     memories: MemoryRepository,
     workspace_roots: tuple[Path, ...] = (),
     skill_roots: tuple[tuple[Path, str], ...] = (),
+    browser_service: BrowserService | None = None,
 ) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(
@@ -94,6 +96,8 @@ def create_builtin_registry(
         register_terminal_tool(registry, workspace_roots)
     if skill_roots:
         register_skill_tools(registry, skill_roots)
+    if browser_service is not None:
+        register_browser_tools(registry, browser_service)
     return registry
 
 

@@ -25,6 +25,7 @@ CAPABILITY_HINTS = {
     "terminal_tasks": "Try: ask Allpath to run this project's tests",
     "skills": "Explore: /skills",
     "mcp_tools": "Explore: /mcp",
+    "browser_tasks": "Explore: /browser",
 }
 
 

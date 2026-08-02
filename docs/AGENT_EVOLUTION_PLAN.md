@@ -81,7 +81,7 @@ These surfaces share curriculum state, but they do not inject changing curriculu
 
 ### Stage 6: Browser and computer tasks
 
-- Add structured browser navigation, snapshots, element actions, and form approvals before raw desktop control. **Safety contract documented; implementation deferred.**
+- Add structured browser navigation, snapshots, element actions, and form approvals before raw desktop control. **Implemented: isolated profile, public-URL enforcement, stable element refs, approval-gated actions, controlled screenshots and downloads.**
 - Add computer use last, disabled by default and preferably isolated from the user's primary desktop. **Safety contract documented; implementation deferred.**
 - Require explicit confirmation for destructive, financial, authentication, and external-communication actions.
 

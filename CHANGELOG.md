@@ -12,6 +12,13 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added self-service browser diagnostics, real navigation testing, approved Chromium installation, isolated-profile reset, and natural-language setup guidance.
 - Added approval-gated browser screenshots and controlled downloads with private fixed directories, unique filenames, owner-only permissions, and artifact size limits.
 
+### Fixed
+
+- Made the live launch card curriculum-driven: one active messaging connector (or an explicit dismissal) advances startup guidance to the next unlearned capability instead of demanding all three platforms.
+- Connected the composer hint to curriculum state so idle live sessions suggest the next unlearned capability action.
+- Counted successful browser screenshots and downloads as `browser_tasks` curriculum evidence.
+- Corrected stale browser-status statements in the boundary and evolution documents and removed the unshipped WeChat mention from the README onboarding sequence.
+
 ## [0.2.0] - 2026-07-29
 
 ### Added

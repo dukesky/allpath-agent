@@ -1,79 +1,105 @@
-# Next Phase Plan: Self-Serve Connectors and Automations
+# Next Phase Plan: Onboarding Funnel and the First Golden Path
 
-Updated: 2026-07-18
+Updated: 2026-08-02
 
 ## Objective
 
-Move Allpath Agent from a developer-assisted MVP to a self-serve personal
-agent that a new user can install, connect to messaging channels, keep running,
-and schedule without leaving the conversation to search for instructions.
+Close the gap between what the curriculum teaches and what a new user can
+actually complete. The destination of this phase is one end-to-end golden
+path: install → connect a model → connect Telegram → create a daily briefing
+automation inside the conversation → receive the briefing in Telegram the
+next morning.
 
-## Milestone 1: Guided connector onboarding
+Context: the previous phase (self-serve connectors and automations) is
+complete except connector delivery. A project review on 2026-08-02 found
+three product-level gaps that block the original goal of proactive,
+progressive onboarding:
 
-Apply the shared `ConnectorOnboardingGuide` to Slack, WhatsApp, and Telegram.
+1. Only one and a half of the three teaching surfaces are wired. The launch
+   card requires all three messaging connectors before curriculum hints
+   appear, so most installations never see it. The composer hint is not
+   connected to curriculum state at all.
+2. The `scheduled_automations` lesson teaches a flow the user cannot
+   complete: chat `/automations` only lists jobs, nothing executes due jobs
+   unattended, and results cannot be delivered to a messaging channel.
+3. The first-level "web lookup" capability from the product design does not
+   exist, while deeper browser automation shipped ahead of it.
 
-Acceptance criteria:
-
-- each step names the exact external page, control, permission, or command;
-- only one coherent external action is requested at a time;
-- progress is visible as `current/total`;
-- `continue`, `back`, `status`, and `cancel` work in English and Chinese;
-- setup resumes at the same non-secret step after process restart;
-- credentials use hidden input and never enter messages or workflow state;
-- credential verification and end-to-end message verification are described as
-  separate checkpoints;
-- successful setup explains the exact command or user action required next.
-
-## Milestone 2: Connector diagnostics
-
-Add one shared diagnostic report for configured channels.
-
-Acceptance criteria:
-
-- report stored credential presence without revealing values;
-- run platform credential or connection verification;
-- report gateway reachability separately from provider authentication;
-- provide platform-specific corrective actions for common failures;
-- support a safe outbound/inbound test procedure where the platform permits it.
-
-## Milestone 3: Background gateway service
-
-Add platform-appropriate commands to install, inspect, restart, and remove a
-per-user gateway service.
+## Milestone 1: Complete the onboarding teaching surfaces
 
 Acceptance criteria:
 
-- macOS uses a user LaunchAgent;
-- Linux uses a user systemd service when available;
-- generated service files contain no credentials;
-- status and logs are discoverable from the Allpath CLI;
-- installation is idempotent and removal is safe;
-- foreground `allpath-agent gateway` remains available for debugging.
+- the live-mode launch card always shows one curriculum-derived next step,
+  regardless of connector state;
+- one active connector (or an explicit `/dismiss messaging_connectors`)
+  satisfies the messaging step; the card never demands all three platforms;
+- the composer hint shows the next unlearned capability action whenever no
+  setup workflow needs input in live mode;
+- suppressed (`unavailable`) and `dismissed` capabilities never appear in
+  launch or composer hints;
+- successful `browser_screenshot` and `browser_download` executions count as
+  `browser_tasks` curriculum evidence;
+- `detect_intents` and `_task_evidence` have direct unit tests;
+- stale documentation is corrected: `BROWSER_COMPUTER_BOUNDARY.md` and
+  `AGENT_EVOLUTION_PLAN.md` Stage 6 acknowledge the shipped structured
+  browser, and the README onboarding sequence no longer lists WeChat.
 
-## Milestone 4: Minimal automation system
+## Milestone 2: Automations become real
 
-Implement persistent scheduled prompts without adding scheduler logic to the
-agent loop.
+Create in chat, run unattended, deliver to a channel.
 
 Acceptance criteria:
 
-- create, list, enable, disable, run-now, and delete jobs;
-- support one-time and cron-expression schedules;
-- execute jobs through the existing application, routing, tools, and budgets;
-- preserve one session per recurring job;
-- record execution status, timestamps, and concise errors in SQLite;
-- require explicit destination configuration before sending results to a
-  messaging connector.
+- a resumable conversational creation flow (natural language or
+  `/automations add`) collects name, prompt, schedule, timezone, and optional
+  destination, echoes the parsed job back, and saves only after explicit
+  confirmation;
+- the foreground gateway and the installed background service execute due
+  automation jobs on an internal tick; no external cron invocation of
+  `allpath-agent automations tick` is required (the subcommand remains for
+  debugging);
+- jobs accept an optional destination connector and conversation; results are
+  delivered through the existing connector send path; explicit destination
+  configuration is required before any result leaves the machine;
+- unattended runs have a documented approval policy: side-effect tool
+  requests are denied and the run is marked as needing attention instead of
+  failing silently;
+- the `scheduled_automations` lesson, `/help`, and `docs/AUTOMATIONS.md`
+  describe only flows a user can actually complete.
+
+## Milestone 3: The golden path
+
+Acceptance criteria:
+
+- a read-only `web_lookup` tool fetches a public URL and returns bounded
+  extracted text, reusing the browser module's public-URL validation; no
+  browser installation is required for it;
+- after `messaging_connectors` succeeds, the curriculum offers a daily
+  briefing as the next lesson, and the suggested flow works end to end;
+- a scripted integration test walks the full path against fake transports:
+  fresh home → model connected → Telegram connected → briefing created in
+  chat → tick executes → the briefing message reaches the fake Telegram
+  transport;
+- a real-account Telegram briefing smoke test is documented as a
+  user-assisted checkpoint;
+- the README quickstart describes the golden path in order.
+
+## Explicitly parked
+
+Not in this phase, recorded so drift is a decision rather than an accident:
+
+- computer use;
+- MCP HTTP transport, OAuth, resources, prompts, dynamic refresh;
+- WeChat and any additional messaging connectors;
+- browser expansion: tabs, visible mode, localhost access, cookie management;
+- Slack channel mentions and allowlists; Telegram disconnect/token rotation;
+- interactive side-effect approvals inside messaging channels (revisit after
+  Milestone 2's needs-attention policy ships).
 
 ## Validation sequence
 
-1. deterministic workflow and adapter unit tests;
+1. unit tests for hint selection, task evidence, and intent detection;
 2. CLI integration tests with temporary Allpath homes;
 3. full local suite through `python3 scripts/run_tests.py`;
-4. real account smoke tests for Telegram, Slack, and WhatsApp;
-5. background-service restart test;
-6. scheduled-job run-now and due-job integration tests.
-
-Real WhatsApp end-to-end testing is a user-assisted checkpoint because it
-requires the user's Meta Business account, public HTTPS tunnel, and phone
-number configuration.
+4. golden-path integration test with fake connector transports;
+5. user-assisted real Telegram daily-briefing smoke test.

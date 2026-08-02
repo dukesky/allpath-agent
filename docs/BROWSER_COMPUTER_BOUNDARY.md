@@ -1,12 +1,10 @@
 # Browser and Computer-Use Boundary
 
-Allpath does not currently expose raw browser or desktop control. This is intentional, not an unfinished hidden feature.
+Allpath ships a structured, approval-gated browser (see [Browser](BROWSER.md)): isolated profile, public-network URL enforcement, bounded snapshots with stable element references, and controlled screenshots and downloads. Raw pixel-level browser control and desktop computer use remain intentionally unexposed.
 
 ## Browser implementation gate
 
-The first browser release must provide structured navigation, snapshots, stable element references, click/type actions, bounded downloads, domain visibility, and approval before form submission, authentication, purchases, external communication, or destructive actions.
-
-It should run in a dedicated browser profile so Agent cookies and downloads are isolated from the user's primary browser.
+The shipped browser satisfies this gate: structured navigation, snapshots, stable element references, approval-gated click/type actions, bounded downloads and screenshots in private fixed directories, and repeated public-URL validation on navigation, redirects, and subresource requests. Form submission, authentication, purchases, external communication, and destructive actions remain approval-gated through the standard side-effect boundary.
 
 ## Computer-use implementation gate
 

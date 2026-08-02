@@ -17,7 +17,7 @@ local configuration and curriculum state and are never added to model context.
 The starter card deliberately highlights one foundational first action rather
 than a menu of features: connecting a reasoning model in the conversation.
 The intended onboarding sequence is model connection, then a messaging channel
-such as Telegram, Slack, WhatsApp, or WeChat, then recurring automations. The
+such as Telegram, Slack, or WhatsApp, then recurring automations. The
 banner only presents steps that the current build can actually complete;
 channel and automation walkthroughs become active as those connectors ship.
 

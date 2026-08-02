@@ -134,6 +134,8 @@ class AgentApplication:
             "browser_snapshot": "browser_tasks",
             "browser_click": "browser_tasks",
             "browser_type": "browser_tasks",
+            "browser_screenshot": "browser_tasks",
+            "browser_download": "browser_tasks",
         }
         for execution in self._tool_executions.list_for_task(session_id, task_id):
             if execution["status"] == "succeeded" and execution["tool_name"] in tool_capabilities:

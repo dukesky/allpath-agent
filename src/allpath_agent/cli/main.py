@@ -75,7 +75,7 @@ from allpath_agent.workflows import (
 
 from .account_auth import ensure_codex_login
 from .approvals import TerminalApprovalHandler
-from .banner import launch_lines
+from .banner import launch_lines, next_capability_hint
 from .render import TerminalChatUI
 from .selector import terminal_select
 
@@ -172,6 +172,14 @@ def _initialize(home: Path) -> int:
     return 0
 
 
+def _active_connector_ids(database: Database) -> tuple[str, ...]:
+    return tuple(
+        record["connector_id"]
+        for record in ConnectorConfigRepository(database).list_all()
+        if record["status"] == "active"
+    )
+
+
 def _chat(
     home: Path,
     database: Database,
@@ -235,11 +243,7 @@ def _chat(
     configured_connectors = ()
     if live_mode:
         configured_roles = tuple(profile.name for profile in load_config(home / "config.toml").models)
-        configured_connectors = tuple(
-            record["connector_id"]
-            for record in ConnectorConfigRepository(database).list_all()
-            if record["status"] == "active"
-        )
+        configured_connectors = _active_connector_ids(database)
     for line in launch_lines(
         live_mode=live_mode,
         session_id=session.id,
@@ -259,6 +263,11 @@ def _chat(
                 input_hint = whatsapp_workflow.input_hint(active_session_id)
             if input_hint is None:
                 input_hint = telegram_workflow.input_hint(active_session_id)
+            if input_hint is None and live_mode:
+                input_hint = next_capability_hint(
+                    application.capability_progress(),
+                    configured_connectors=_active_connector_ids(database),
+                )
             if input_hint is None and not live_mode:
                 input_hint = "Try: 连接模型 · connect Telegram · what can you do"
             user_message = chat_ui.read_message(input_hint)

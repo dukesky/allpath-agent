@@ -65,6 +65,7 @@ from allpath_agent.tools import (
     reset_browser_profile,
 )
 from allpath_agent.workflows import (
+    AutomationCreationWorkflow,
     ProviderConnectionWorkflow,
     SlackConnectionWorkflow,
     TelegramConnectionWorkflow,
@@ -235,6 +236,15 @@ def _chat(
         SecretStore(home / "secrets.json"),
         ConnectorConfigRepository(database),
     )
+    automation_workflow = AutomationCreationWorkflow(
+        WorkflowRunRepository(database),
+        AutomationService(
+            AutomationJobRepository(database),
+            AutomationRunRepository(database),
+            sessions,
+        ),
+        ConnectorSessionRepository(database).list_all,
+    )
     hidden_input = secret_input_fn or getpass.getpass
     skill_roots = default_skill_roots(home, Path.cwd())
     skill_catalog = SkillCatalog(skill_roots)
@@ -266,6 +276,8 @@ def _chat(
                 input_hint = whatsapp_workflow.input_hint(active_session_id)
             if input_hint is None:
                 input_hint = telegram_workflow.input_hint(active_session_id)
+            if input_hint is None:
+                input_hint = automation_workflow.input_hint(active_session_id)
             if input_hint is None and live_mode:
                 input_hint = next_capability_hint(
                     application.capability_progress(),
@@ -334,9 +346,17 @@ def _chat(
             else:
                 _show_connectors(ConnectorConfigRepository(database), output)
             continue
-        if user_message == "/automations":
+        if user_message == "/automations" or user_message.startswith("/automations "):
+            action = user_message.removeprefix("/automations").strip()
             application.record_capability_tried("scheduled_automations")
-            _list_automations(AutomationJobRepository(database), output)
+            if action == "add":
+                automation_result = automation_workflow.handle(active_session_id, "create automation")
+                for message in automation_result.messages:
+                    chat_ui.assistant(message, "setup")
+            elif action:
+                error_output("Usage: /automations [add]")
+            else:
+                _list_automations(AutomationJobRepository(database), output)
             continue
         if user_message == "/skills":
             skills = skill_catalog.list_metadata()
@@ -521,6 +541,15 @@ def _chat(
                     chat_ui.assistant(message, "setup")
             if telegram_result.completed:
                 application.record_capability_success("messaging_connectors")
+            continue
+
+        automation_result = automation_workflow.handle(active_session_id, user_message)
+        if automation_result.handled:
+            application.record_capability_tried("scheduled_automations")
+            for message in automation_result.messages:
+                chat_ui.assistant(message, "setup")
+            if automation_result.completed:
+                application.record_capability_success("scheduled_automations")
             continue
 
         connection_result = connection_workflow.handle(

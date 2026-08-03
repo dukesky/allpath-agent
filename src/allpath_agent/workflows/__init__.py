@@ -1,3 +1,4 @@
+from .automation_creation import AutomationCreationWorkflow
 from .provider_connection import (
     ConnectionFlowResult,
     ProviderConnectionWorkflow,
@@ -10,6 +11,7 @@ from .slack_connection import SlackConnectionWorkflow
 from .whatsapp_connection import WhatsAppConnectionWorkflow
 
 __all__ = [
+    "AutomationCreationWorkflow",
     "ConnectionFlowResult",
     "ProviderConnectionWorkflow",
     "reassign_model_role",

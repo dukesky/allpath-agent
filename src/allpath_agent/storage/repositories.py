@@ -213,6 +213,16 @@ class ConnectorSessionRepository:
             ).fetchone()
         return row["session_id"] if row is not None else None
 
+    def list_all(self) -> list[dict[str, Any]]:
+        with self._database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT connector_id, conversation_id, session_id
+                FROM connector_sessions ORDER BY connector_id, conversation_id
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
 
 class ConnectorConfigRepository:
     def __init__(self, database: Database):

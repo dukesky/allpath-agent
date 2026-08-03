@@ -551,6 +551,11 @@ def _chat(
                 chat_ui.assistant(message, "setup")
             if automation_result.completed:
                 application.record_capability_success("scheduled_automations")
+                jobs = AutomationJobRepository(database).list_all()
+                if jobs:
+                    newest = max(jobs, key=lambda job: job["created_at"])
+                    if newest["schedule_kind"] == "cron" and newest["destination_connector_id"]:
+                        application.record_capability_success("daily_briefing")
             continue
 
         connection_result = connection_workflow.handle(

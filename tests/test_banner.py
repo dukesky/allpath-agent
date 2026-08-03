@@ -28,6 +28,7 @@ class LaunchBannerTestCase(unittest.TestCase):
                 configured_roles=("fast", "advanced"),
                 configured_connectors=("telegram", "slack", "whatsapp"),
                 capability_progress=(
+                    ("daily_briefing", "Daily briefing", "habitual"),
                     ("durable_memory", "Durable memory", "habitual"),
                     ("current_time", "Current time", "unseen"),
                 ),
@@ -59,6 +60,9 @@ class LaunchBannerTestCase(unittest.TestCase):
                 session_id="session-one-connector",
                 configured_roles=("standard",),
                 configured_connectors=("telegram",),
+                capability_progress=(
+                    ("daily_briefing", "Daily briefing", "habitual"),
+                ),
             )
         )
 
@@ -74,6 +78,7 @@ class LaunchBannerTestCase(unittest.TestCase):
                 configured_roles=("standard",),
                 capability_progress=(
                     ("messaging_connectors", "Messaging connectors", "dismissed"),
+                    ("daily_briefing", "Daily briefing", "habitual"),
                 ),
             )
         )

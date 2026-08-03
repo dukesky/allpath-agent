@@ -27,6 +27,10 @@ class DetectIntentsTestCase(unittest.TestCase):
         self.assertIn("browser", detect_intents("帮我打开网站看看"))
         self.assertIn("terminal", detect_intents("帮我运行测试"))
 
+    def test_detects_briefing_intent(self) -> None:
+        self.assertIn("briefing", detect_intents("send me a daily briefing"))
+        self.assertIn("briefing", detect_intents("每天早上给我发简报"))
+
     def test_one_message_can_carry_multiple_intents(self) -> None:
         intents = detect_intents("remember to calculate my time budget")
         self.assertLessEqual({"chat", "memory", "calculation", "time"}, intents)

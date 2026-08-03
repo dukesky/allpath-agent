@@ -133,4 +133,17 @@ def default_capabilities() -> list[Capability]:
             setup_effort=10,
             lesson="Use /browser to inspect readiness, then ask Allpath to open and inspect a public website.",
         ),
+        Capability(
+            id="daily_briefing",
+            title="Daily briefing",
+            base_priority=44,
+            prerequisite_ids=("messaging_connectors",),
+            trigger_intents=frozenset({"automation", "briefing"}),
+            setup_effort=10,
+            lesson=(
+                "Say “create automation” to schedule a daily briefing: I can read public pages "
+                "with web_lookup and deliver the summary to your connected channel every morning."
+            ),
+        ),
+
     ]

@@ -14,6 +14,7 @@ ART = (
 
 CAPABILITY_HINTS = {
     "messaging_connectors": "Connect a messaging channel: try “connect Telegram”",
+    "daily_briefing": "Try: create automation — a daily briefing to your channel",
     "durable_memory": "Try: remember that I prefer concise answers",
     "current_time": "Try: what time is it in Asia/Shanghai?",
     "session_management": "Explore: /sessions and /new",
@@ -22,7 +23,7 @@ CAPABILITY_HINTS = {
     "live_provider": "Explore: /model and /models",
     "scheduled_automations": "Try: create automation",
     "workspace_files": "Try: ask Allpath to explain this project",
-    "terminal_tasks": "Try: ask Allpath to run this project's tests",
+    "terminal_tasks": "Try: ask Allpath to run this project’s tests",
     "skills": "Explore: /skills",
     "mcp_tools": "Explore: /mcp",
     "browser_tasks": "Explore: /browser",
@@ -30,6 +31,7 @@ CAPABILITY_HINTS = {
 
 HINT_ORDER = (
     "messaging_connectors",
+    "daily_briefing",
     "durable_memory",
     "current_time",
     "session_management",

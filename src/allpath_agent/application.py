@@ -115,6 +115,7 @@ class AgentApplication:
             "skill": "skills",
             "mcp": "mcp_tools",
             "browser": "browser_tasks",
+            "briefing": "daily_briefing",
         }
         for intent, capability_id in intent_capabilities.items():
             if intent in intents:
@@ -292,6 +293,15 @@ def detect_intents(message: str) -> set[str]:
             "浏览网页",
             "打开网站",
             "点击网页",
+        ),
+        "briefing": (
+            "daily brief",
+            "daily briefing",
+            "morning brief",
+            "briefing",
+            "简报",
+            "晨报",
+            "早报",
         ),
     }
     for intent, phrases in mappings.items():

@@ -115,7 +115,7 @@ class CurriculumServiceTestCase(unittest.TestCase):
 
     def test_catalog_exposes_current_capabilities(self) -> None:
         rows = self.service.list_progress()
-        self.assertEqual(len(rows), 15)
+        self.assertEqual(len(rows), 16)
         self.assertIn("browser_tasks", {capability_id for capability_id, _, _ in rows})
         self.assertTrue(all(status == "unseen" for _, _, status in rows))
 
@@ -185,6 +185,19 @@ class CurriculumServiceTestCase(unittest.TestCase):
         self.service.record_success("durable_memory")
         self.service.record_tried("durable_memory")
         self.assertEqual(self.progress.get("durable_memory").status, "succeeded")
+
+    def test_daily_briefing_unlocks_after_messaging_and_matches_briefing_intent(self) -> None:
+        engine = CurriculumEngine(default_capabilities())
+        progress = {
+            "basic_chat": CapabilityProgress("basic_chat", LearningStatus.HABITUAL),
+            "live_provider": CapabilityProgress("live_provider", LearningStatus.SUCCEEDED),
+            "messaging_connectors": CapabilityProgress("messaging_connectors", LearningStatus.SUCCEEDED),
+        }
+
+        capability = engine.recommend({"chat", "briefing"}, progress, frozenset())
+
+        self.assertIsNotNone(capability)
+        self.assertEqual(capability.id, "daily_briefing")
 
 
 if __name__ == "__main__":

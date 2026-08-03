@@ -86,6 +86,19 @@ class LaunchBannerTestCase(unittest.TestCase):
         self.assertIn("remember that I prefer concise answers", text)
         self.assertNotIn("messaging channel", text)
 
+    def test_live_banner_offers_daily_briefing_right_after_first_connector(self) -> None:
+        text = "\n".join(
+            launch_lines(
+                live_mode=True,
+                session_id="session-briefing",
+                configured_roles=("standard",),
+                configured_connectors=("telegram",),
+            )
+        )
+
+        self.assertIn("Next: Try: create automation — a daily briefing to your channel", text)
+        self.assertNotIn("remember that I prefer", text)
+
     def test_next_capability_hint_skips_unavailable_and_exhausts_to_none(self) -> None:
         suppressed = [
             (capability_id, capability_id, "unavailable") for capability_id in HINT_ORDER

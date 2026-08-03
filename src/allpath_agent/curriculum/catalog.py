@@ -86,7 +86,7 @@ def default_capabilities() -> list[Capability]:
             prerequisite_ids=("live_provider",),
             trigger_intents=frozenset({"automation"}),
             setup_effort=15,
-            lesson="Try /automations to inspect scheduled Agent jobs, then create a one-time or cron task.",
+            lesson="Say “create automation” (or /automations add) and I will collect the schedule, confirm the details, and save the job.",
         ),
         Capability(
             id="workspace_files",

@@ -20,7 +20,7 @@ CAPABILITY_HINTS = {
     "model_routing": "Explore: /route after a complex request",
     "tool_approvals": "Try: remember a preference to see safe approval",
     "live_provider": "Explore: /model and /models",
-    "scheduled_automations": "Explore: /automations",
+    "scheduled_automations": "Try: create automation",
     "workspace_files": "Try: ask Allpath to explain this project",
     "terminal_tasks": "Try: ask Allpath to run this project's tests",
     "skills": "Explore: /skills",

@@ -54,9 +54,11 @@ allpath-agent automations run <job-id>
 allpath-agent automations tick
 ```
 
-Natural-language creation remains a resumable workflow. Before saving, Allpath
-must echo the interpreted schedule, timezone, prompt, model policy, and output
-destination and ask for confirmation.
+Conversational creation is a resumable workflow: say "create automation" (or
+`/automations add`), answer name, task, schedule, timezone, and destination
+prompts, review the echoed summary, and type "confirm" before anything is
+saved. Destinations are chosen from conversations Allpath has already seen on
+a connected channel; message the bot once to register one.
 
 ## SQLite model
 
@@ -134,8 +136,15 @@ allpath-agent automations disable <job-id>
 allpath-agent automations delete <job-id>
 ```
 
-This slice stores results locally. Conversational creation, automatic runner
-service integration, and connector delivery remain subsequent slices.
+Conversational creation, gateway execution, and connector delivery are now
+implemented. The gateway (foreground `allpath-agent gateway` or the installed
+background service) drains due jobs after each connector poll, so no external
+cron invocation of `tick` is required; `tick` remains available for debugging.
+Results are delivered when a job carries an explicitly configured destination
+connector and conversation; a delivery failure marks the run failed with
+`DeliveryError` while retaining the generated output. Unattended runs keep
+side-effecting tools default-denied; a denied request marks the run
+"needs attention" in run records and CLI output instead of failing silently.
 
 ## Explicitly deferred
 

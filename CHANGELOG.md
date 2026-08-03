@@ -6,6 +6,14 @@ The format follows Keep a Changelog conventions. During development, changes acc
 
 ## Unreleased
 
+### Added
+
+- Added conversational automation creation as a resumable bilingual workflow with schedule and timezone validation, destination selection from connected conversations, and an explicit confirmation echo before saving.
+- Added automation execution to the gateway loop so due jobs run unattended in the foreground gateway and the installed background service without external cron invocation.
+- Added connector delivery of automation results with explicit destination configuration, recorded delivered message IDs, and failure retention of generated output.
+- Added needs-attention marking for unattended runs whose side-effect tool requests were denied, surfaced in gateway and CLI run output.
+- Added `--connector` and `--conversation` destination flags to `allpath-agent automations add-once` and `add-cron`.
+
 ## [0.3.0] - 2026-08-02
 
 ### Added

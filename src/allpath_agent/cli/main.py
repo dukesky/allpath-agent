@@ -307,7 +307,7 @@ def _chat(
             output(
                 "Commands: /help, /new, /sessions, /resume <session-id>, "
                 "/model, /models, /route, /connectors, /capabilities, "
-                "/automations, /skills, /mcp, /browser, /dismiss [capability-id], /exit"
+                "/automations [add], /skills, /mcp, /browser, /dismiss [capability-id], /exit"
             )
             continue
         if user_message.startswith("/help "):

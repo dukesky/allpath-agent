@@ -15,6 +15,7 @@ from .browser import BrowserService, register_browser_tools
 from .skills import register_skill_tools
 from .terminal import register_terminal_tool
 from .workspace import register_workspace_tools
+from .web import register_web_tools
 
 
 def create_builtin_registry(
@@ -91,6 +92,7 @@ def create_builtin_registry(
             handler=_calculate,
         )
     )
+    register_web_tools(registry)
     if workspace_roots:
         register_workspace_tools(registry, workspace_roots)
         register_terminal_tool(registry, workspace_roots)

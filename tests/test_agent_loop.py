@@ -505,7 +505,7 @@ class AgentLoopTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.content, "I did not save that without approval.")
-        self.assertEqual(len(provider.requests[0].tools), 4)
+        self.assertEqual(len(provider.requests[0].tools), 5)
         self.assertIsNone(memories.get("style"))
         self.assertEqual(
             approvals.list_for_task(self.session.id, "task-approval")[0]["decision"],

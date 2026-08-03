@@ -49,7 +49,7 @@ class ToolRuntimeTestCase(unittest.TestCase):
     def test_schemas_are_stable_and_sorted(self) -> None:
         names = [schema["function"]["name"] for schema in self.registry.schemas()]
         self.assertEqual(names, sorted(names))
-        self.assertEqual(names, ["calculate", "current_datetime", "memory_get", "memory_set"])
+        self.assertEqual(names, ["calculate", "current_datetime", "memory_get", "memory_set", "web_lookup"])
 
     def test_invalid_arguments_do_not_reach_handler(self) -> None:
         runtime = ToolRuntime(self.registry, self.approvals)

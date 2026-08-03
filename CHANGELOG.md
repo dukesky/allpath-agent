@@ -6,6 +6,8 @@ The format follows Keep a Changelog conventions. During development, changes acc
 
 ## Unreleased
 
+## [0.4.0] - 2026-08-02
+
 ### Added
 
 - Added conversational automation creation as a resumable bilingual workflow with schedule and timezone validation, destination selection from connected conversations, and an explicit confirmation echo before saving.

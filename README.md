@@ -219,10 +219,10 @@ For local development from this checkout:
 
 The fastest way to feel what Allpath is for:
 
-1. `allpath-agent`, then say "connect a model" and follow the conversation.
-2. Say "connect Telegram" and follow the four-step tutorial, then message your bot once.
-3. Say "create automation" and schedule a daily briefing — for example
-   "Use web_lookup on your favorite news page and summarize it", cron
+1. `allpath-agent`, then say “connect a model” and follow the conversation.
+2. Say “connect Telegram” and follow the four-step tutorial, then message your bot once.
+3. Say “create automation” and schedule a daily briefing — for example
+   “Use web_lookup on your favorite news page and summarize it”, cron
    `0 8 * * *`, your timezone, delivered to your Telegram conversation.
 4. Run `allpath-agent gateway` (or install the background service with
    `allpath-agent gateway install`). The next morning the briefing arrives in

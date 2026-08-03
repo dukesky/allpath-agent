@@ -54,9 +54,9 @@ allpath-agent automations run <job-id>
 allpath-agent automations tick
 ```
 
-Conversational creation is a resumable workflow: say "create automation" (or
+Conversational creation is a resumable workflow: say “create automation” (or
 `/automations add`), answer name, task, schedule, timezone, and destination
-prompts, review the echoed summary, and type "confirm" before anything is
+prompts, review the echoed summary, and type “confirm” before anything is
 saved. Destinations are chosen from conversations Allpath has already seen on
 a connected channel; message the bot once to register one.
 
@@ -144,7 +144,7 @@ Results are delivered when a job carries an explicitly configured destination
 connector and conversation; a delivery failure marks the run failed with
 `DeliveryError` while retaining the generated output. Unattended runs keep
 side-effecting tools default-denied; a denied request marks the run
-"needs attention" in run records and CLI output instead of failing silently.
+“needs attention” in run records and CLI output instead of failing silently.
 
 ## Explicitly deferred
 

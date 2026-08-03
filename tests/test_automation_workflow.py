@@ -157,3 +157,12 @@ class AutomationCreationWorkflowTestCase(unittest.TestCase):
 
         self.assertTrue(result.handled)
         self.assertTrue(any("名称" in message for message in result.messages))
+
+    def test_repeated_trigger_while_active_is_consumed_as_answer(self) -> None:
+        self._drive("create automation")
+
+        result = self.workflow.handle("session-1", "status")
+
+        self.assertTrue(result.handled)
+        self.assertTrue(self.workflow.active("session-1"))
+        self.assertEqual(self.jobs.list_all(), [])

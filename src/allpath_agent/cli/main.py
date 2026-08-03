@@ -350,7 +350,8 @@ def _chat(
             action = user_message.removeprefix("/automations").strip()
             application.record_capability_tried("scheduled_automations")
             if action == "add":
-                automation_result = automation_workflow.handle(active_session_id, "create automation")
+                probe = "status" if automation_workflow.active(active_session_id) else "create automation"
+                automation_result = automation_workflow.handle(active_session_id, probe)
                 for message in automation_result.messages:
                     chat_ui.assistant(message, "setup")
             elif action:

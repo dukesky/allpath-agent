@@ -21,11 +21,11 @@ _HINTS = {
     "name": {"en": "automation name · cancel", "zh": "自动化名称 · 取消"},
     "prompt": {"en": "task instruction · back · cancel", "zh": "任务指令 · 返回 · 取消"},
     "schedule": {
-        "en": 'cron "0 8 * * 1-5" or ISO time · back · cancel',
-        "zh": 'cron "0 8 * * 1-5" 或 ISO 时间 · 返回 · 取消',
+        "en": 'cron “0 8 * * 1-5” or ISO time · back · cancel',
+        "zh": 'cron “0 8 * * 1-5” 或 ISO 时间 · 返回 · 取消',
     },
-    "timezone": {"en": 'IANA timezone or "default" · back', "zh": 'IANA 时区或"默认" · 返回'},
-    "destination": {"en": 'number, or "none" · back', "zh": '编号，或"无" · 返回'},
+    "timezone": {"en": 'IANA timezone or “default” · back', "zh": 'IANA 时区或“默认” · 返回'},
+    "destination": {"en": 'number, or “none” · back', "zh": '编号，或“无” · 返回'},
     "confirm": {"en": "confirm · back · cancel", "zh": "确认 · 返回 · 取消"},
 }
 
@@ -105,8 +105,8 @@ class AutomationCreationWorkflow:
                     (
                         _text(
                             language,
-                            'Enter a five-field cron expression such as "0 8 * * 1-5", or an ISO time such as "2026-12-01T08:00".',
-                            '请输入五段 cron 表达式（例如"0 8 * * 1-5"）或 ISO 时间（例如"2026-12-01T08:00"）。',
+                            'Enter a five-field cron expression such as “0 8 * * 1-5”, or an ISO time such as “2026-12-01T08:00”.',
+                            '请输入五段 cron 表达式（例如“0 8 * * 1-5”）或 ISO 时间（例如“2026-12-01T08:00”）。',
                         ),
                     ),
                 )
@@ -163,9 +163,9 @@ class AutomationCreationWorkflow:
                 (
                     _text(
                         language,
-                        f'Automation "{job["name"]}" saved. Next run: {job["next_run_at"]}. '
+                        f'Automation “{job["name"]}” saved. Next run: {job["next_run_at"]}. '
                         "It executes while `allpath-agent gateway` runs.",
-                        f'自动化"{job["name"]}"已保存，下次执行：{job["next_run_at"]}。'
+                        f'自动化“{job["name"]}”已保存，下次执行：{job["next_run_at"]}。'
                         "它会在 `allpath-agent gateway` 运行期间自动执行。",
                     ),
                 ),
@@ -193,34 +193,34 @@ class AutomationCreationWorkflow:
     def _prompt(self, step: str, state: dict[str, Any]) -> str:
         language = state.get("language", "en")
         if step == "name":
-            return _text(language, 'What should this automation be called? (e.g. "Morning brief")', '自动化名称？（例如"晨间简报"）')
+            return _text(language, 'What should this automation be called? (e.g. “Morning brief”)', '自动化名称？（例如“晨间简报”）')
         if step == "prompt":
             return _text(language, "What should Allpath do each time it runs? Describe the task in one message.", "每次执行时 Allpath 应该做什么？用一条消息描述任务。")
         if step == "schedule":
             return _text(
                 language,
-                'When should it run? Enter a five-field cron expression ("0 8 * * 1-5") or a one-time ISO time ("2026-12-01T08:00").',
-                '什么时候执行？输入五段 cron 表达式（"0 8 * * 1-5"）或一次性 ISO 时间（"2026-12-01T08:00"）。',
+                'When should it run? Enter a five-field cron expression (“0 8 * * 1-5”) or a one-time ISO time (“2026-12-01T08:00”).',
+                '什么时候执行？输入五段 cron 表达式（“0 8 * * 1-5”）或一次性 ISO 时间（“2026-12-01T08:00”）。',
             )
         if step == "timezone":
             return _text(
                 language,
-                'Which IANA timezone? Type "default" for UTC, or e.g. America/Los_Angeles.',
-                '使用哪个 IANA 时区？输入"默认"使用 UTC，或例如 Asia/Shanghai。',
+                'Which IANA timezone? Type “default” for UTC, or e.g. America/Los_Angeles.',
+                '使用哪个 IANA 时区？输入“默认”使用 UTC，或例如 Asia/Shanghai。',
             )
         if step == "destination":
             bindings = self._list_bindings()
             if not bindings:
                 return _text(
                     language,
-                    'Where should results go? No connected conversations exist yet, so type "none" to keep results local. Message your bot once after connecting a channel to register a destination.',
-                    '结果发送到哪里？当前还没有已连接的会话，输入"无"将结果保留在本地。连接消息渠道后先给机器人发一条消息即可注册投递目标。',
+                    'Where should results go? No connected conversations exist yet, so type “none” to keep results local. Message your bot once after connecting a channel to register a destination.',
+                    '结果发送到哪里？当前还没有已连接的会话，输入“无”将结果保留在本地。连接消息渠道后先给机器人发一条消息即可注册投递目标。',
                 )
             lines = [
                 _text(
                     language,
-                    'Where should results go? Type a number, or "none" to keep results local:',
-                    '结果发送到哪里？输入编号，或输入"无"保留在本地：',
+                    'Where should results go? Type a number, or “none” to keep results local:',
+                    '结果发送到哪里？输入编号，或输入“无”保留在本地：',
                 )
             ]
             for index, binding in enumerate(bindings, start=1):
@@ -234,14 +234,14 @@ class AutomationCreationWorkflow:
             f"• Schedule ({state.get('schedule_kind')}): {state.get('schedule_expression')}\n"
             f"• Timezone: {state.get('timezone')}\n"
             f"• Destination: {_destination_text(state)}\n"
-            'Type "confirm" to save, "back" to adjust, or "cancel".',
+            'Type “confirm” to save, “back” to adjust, or “cancel”.',
             '请确认这个自动化：\n'
             f"• 名称：{state.get('name')}\n"
             f"• 任务：{state.get('prompt')}\n"
             f"• 计划（{state.get('schedule_kind')}）：{state.get('schedule_expression')}\n"
             f"• 时区：{state.get('timezone')}\n"
             f"• 投递目标：{_destination_text(state)}\n"
-            '输入"确认"保存，"返回"修改，或"取消"。',
+            '输入“确认”保存，“返回”修改，或“取消”。',
         )
         return summary
 

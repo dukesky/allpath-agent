@@ -148,3 +148,18 @@ The default suite now validates all of these behaviors against temporary SQLite 
 ## Supported environments
 
 CI validates Python 3.11, 3.12, and 3.13 on Linux. Local macOS validation is performed during development. Additional operating systems can be added when platform-specific behavior enters the MVP.
+
+## Golden-path smoke test (user-assisted)
+
+Automated coverage ends at fake transports (`tests/test_golden_path.py`). One
+real-account checkpoint remains user-assisted because it requires a personal
+Telegram bot:
+
+1. Connect a live model and Telegram on a fresh install.
+2. Message the bot once so the conversation is registered as a destination.
+3. Create a cron briefing automation in chat delivered to that conversation,
+   scheduled one or two minutes ahead.
+4. Run `allpath-agent gateway` and wait for the scheduled minute.
+5. Confirm the briefing message arrives in Telegram, `allpath-agent
+   automations list` shows the advanced next run, and the run record carries
+   the delivered message ID.

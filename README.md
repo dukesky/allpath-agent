@@ -49,7 +49,7 @@ The same progress also shapes the launch card: completed, habitual, and
 dismissed lessons are skipped so startup guidance advances with the user rather
 than repeating a permanent tutorial.
 
-The current curriculum contains fifteen implemented capabilities. Suggestions appear only after the current answer, at most once per session. Recent suggestions receive a cross-session cooldown, successful actions advance progress automatically, and `/dismiss` suppresses unwanted lessons.
+The current curriculum contains sixteen implemented capabilities. Suggestions appear only after the current answer, at most once per session. Recent suggestions receive a cross-session cooldown, successful actions advance progress automatically, and `/dismiss` suppresses unwanted lessons.
 
 Examples:
 
@@ -214,6 +214,19 @@ For local development from this checkout:
 ```bash
 ./scripts/install.sh --local
 ```
+
+### The golden path
+
+The fastest way to feel what Allpath is for:
+
+1. `allpath-agent`, then say "connect a model" and follow the conversation.
+2. Say "connect Telegram" and follow the four-step tutorial, then message your bot once.
+3. Say "create automation" and schedule a daily briefing — for example
+   "Use web_lookup on your favorite news page and summarize it", cron
+   `0 8 * * *`, your timezone, delivered to your Telegram conversation.
+4. Run `allpath-agent gateway` (or install the background service with
+   `allpath-agent gateway install`). The next morning the briefing arrives in
+   Telegram.
 
 ## Development setup
 

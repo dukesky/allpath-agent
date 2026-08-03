@@ -13,6 +13,15 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added connector delivery of automation results with explicit destination configuration, recorded delivered message IDs, and failure retention of generated output.
 - Added needs-attention marking for unattended runs whose side-effect tool requests were denied, surfaced in gateway and CLI run output.
 - Added `--connector` and `--conversation` destination flags to `allpath-agent automations add-once` and `add-cron`.
+- Added a read-only `web_lookup` tool that fetches one public page with redirect re-validation, bounded body reads, script/style-free text extraction, and truncated output.
+- Added the sixteenth curriculum capability, Daily briefing, offered after a messaging connector succeeds and evidenced by saving a cron automation with a delivery destination.
+- Added a deterministic golden-path integration test: fresh home → fake live model → seeded Telegram → briefing created in chat → forced-due tick → delivery asserted against a fake Telegram transport.
+
+### Fixed
+
+- Stopped unattended automation runs from writing curriculum progress or suggestions; only interactive conversations teach and record capabilities now.
+- Disabled automations with un-parseable schedules instead of crashing the gateway runner, and normalized `needs_attention` to a boolean in run records.
+- Kept local-only automations runnable from `automations run`/`tick` when an unrelated connector's secrets are missing.
 
 ## [0.3.0] - 2026-08-02
 

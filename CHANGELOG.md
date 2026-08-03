@@ -6,6 +6,8 @@ The format follows Keep a Changelog conventions. During development, changes acc
 
 ## Unreleased
 
+## [0.3.0] - 2026-08-02
+
 ### Added
 
 - Added the first structured browser core with an isolated Chrome/Chromium profile, public-network URL enforcement, bounded snapshots, stable element refs, and approval-gated click/type actions with typed-text audit redaction.

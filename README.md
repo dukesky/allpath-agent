@@ -1,6 +1,6 @@
 # Allpath Agent
 
-Latest release: [v0.2.0](release_notes/v0.2.0.md)
+Latest release: [v0.3.0](release_notes/v0.3.0.md)
 
 [![CI](https://github.com/dukesky/allpath-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/dukesky/allpath-agent/actions/workflows/ci.yml)
 

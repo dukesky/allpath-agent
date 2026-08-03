@@ -113,6 +113,8 @@ def build_parser() -> argparse.ArgumentParser:
     automations.add_argument("--at", help="ISO date/time for a one-time job")
     automations.add_argument("--cron", help="Five-field cron expression")
     automations.add_argument("--timezone", default="UTC", help="IANA timezone")
+    automations.add_argument("--connector", help="Destination connector id for results")
+    automations.add_argument("--conversation", help="Destination conversation id for results")
     return parser
 
 
@@ -1067,13 +1069,27 @@ def _manage_automations(home: Path, database: Database, args: argparse.Namespace
         if args.action == "add-once":
             _require_automation_args(args, "name", "prompt", "at")
             service = AutomationService(jobs, runs, sessions)
-            job = service.create_once(args.name, args.prompt, args.at, args.timezone)
+            job = service.create_once(
+                args.name,
+                args.prompt,
+                args.at,
+                args.timezone,
+                destination_connector_id=args.connector,
+                destination_conversation_id=args.conversation,
+            )
             output(f"Created one-time automation {job['id']}: {job['name']} next={job['next_run_at']}")
             return 0
         if args.action == "add-cron":
             _require_automation_args(args, "name", "prompt", "cron")
             service = AutomationService(jobs, runs, sessions)
-            job = service.create_cron(args.name, args.prompt, args.cron, args.timezone)
+            job = service.create_cron(
+                args.name,
+                args.prompt,
+                args.cron,
+                args.timezone,
+                destination_connector_id=args.connector,
+                destination_conversation_id=args.conversation,
+            )
             output(f"Created recurring automation {job['id']}: {job['name']} next={job['next_run_at']}")
             return 0
         if args.action in {"enable", "disable"}:

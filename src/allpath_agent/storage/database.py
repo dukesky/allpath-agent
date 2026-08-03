@@ -218,6 +218,12 @@ MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
             "CREATE INDEX automation_runs_job_scheduled ON automation_runs(job_id, scheduled_for)",
         ),
     ),
+    (
+        9,
+        (
+            "ALTER TABLE automation_runs ADD COLUMN needs_attention INTEGER NOT NULL DEFAULT 0",
+        ),
+    ),
 )
 
 

@@ -794,6 +794,8 @@ class AutomationRunRepository:
         output_text: str | None = None,
         error_type: str | None = None,
         error_message: str | None = None,
+        output_message_id: str | None = None,
+        needs_attention: bool = False,
     ) -> dict[str, Any]:
         if status not in {"succeeded", "failed", "interrupted"}:
             raise ValueError("invalid automation run terminal status")
@@ -802,7 +804,8 @@ class AutomationRunRepository:
                 """
                 UPDATE automation_runs
                 SET status = ?, task_id = COALESCE(?, task_id), completed_at = ?,
-                    output_text = ?, error_type = ?, error_message = ?
+                    output_text = ?, error_type = ?, error_message = ?,
+                    output_message_id = ?, needs_attention = ?
                 WHERE id = ? AND status = 'running'
                 """,
                 (
@@ -812,6 +815,8 @@ class AutomationRunRepository:
                     output_text,
                     error_type,
                     error_message[:240] if error_message else None,
+                    output_message_id,
+                    int(needs_attention),
                     run_id,
                 ),
             )

@@ -9,6 +9,7 @@ from allpath_agent.storage import (
     AutomationJobRepository,
     AutomationRunRepository,
     SessionRepository,
+    ToolApprovalRepository,
 )
 from allpath_agent.hooks import HookBus
 
@@ -17,6 +18,9 @@ class AutomationApplication(Protocol):
     def start_session(self, session_id: str) -> None: ...
 
     def send(self, session_id: str, message: str) -> Any: ...
+
+
+Deliverer = Callable[[str, str, str], str]
 
 
 @dataclass(frozen=True)
@@ -105,6 +109,8 @@ class AutomationService:
         application: AutomationApplication | None = None,
         now: Callable[[], datetime] | None = None,
         hooks: HookBus | None = None,
+        approvals: ToolApprovalRepository | None = None,
+        deliver: Deliverer | None = None,
     ):
         self.jobs = jobs
         self.runs = runs
@@ -112,8 +118,20 @@ class AutomationService:
         self.application = application
         self._now = now or (lambda: datetime.now(UTC))
         self._hooks = hooks or HookBus()
+        self._approvals = approvals
+        self._deliver_fn = deliver
 
-    def create_once(self, name: str, prompt: str, at: str, timezone: str) -> dict[str, Any]:
+    def create_once(
+        self,
+        name: str,
+        prompt: str,
+        at: str,
+        timezone: str,
+        *,
+        model_role: str = "auto",
+        destination_connector_id: str | None = None,
+        destination_conversation_id: str | None = None,
+    ) -> dict[str, Any]:
         next_run = parse_once(at, timezone)
         if next_run <= self._now().astimezone(UTC):
             raise ValueError("one-time automation must be scheduled in the future")
@@ -126,9 +144,22 @@ class AutomationService:
             timezone=timezone,
             session_id=session.id,
             next_run_at=next_run.isoformat(),
+            model_role=model_role,
+            destination_connector_id=destination_connector_id,
+            destination_conversation_id=destination_conversation_id,
         )
 
-    def create_cron(self, name: str, prompt: str, expression: str, timezone: str) -> dict[str, Any]:
+    def create_cron(
+        self,
+        name: str,
+        prompt: str,
+        expression: str,
+        timezone: str,
+        *,
+        model_role: str = "auto",
+        destination_connector_id: str | None = None,
+        destination_conversation_id: str | None = None,
+    ) -> dict[str, Any]:
         schedule = parse_cron(expression, timezone)
         next_run = schedule.next_after(self._now())
         session = self.sessions.create(title=f"automation:{name.strip()}")
@@ -140,6 +171,9 @@ class AutomationService:
             timezone=timezone,
             session_id=session.id,
             next_run_at=next_run.isoformat(),
+            model_role=model_role,
+            destination_connector_id=destination_connector_id,
+            destination_conversation_id=destination_conversation_id,
         )
 
     def run_now(self, job_id: str) -> dict[str, Any]:
@@ -172,12 +206,27 @@ class AutomationService:
         try:
             self.application.start_session(job["session_id"])
             result = self.application.send(job["session_id"], job["prompt"])
-            finished = self.runs.finish(
-                run["id"],
-                "succeeded",
-                task_id=result.task_id,
-                output_text=result.agent.content,
-            )
+            needs_attention = self._denied_side_effects(job["session_id"], result.task_id)
+            delivered_id, delivery_error = self._deliver(job, result.agent.content)
+            if delivery_error is None:
+                finished = self.runs.finish(
+                    run["id"],
+                    "succeeded",
+                    task_id=result.task_id,
+                    output_text=result.agent.content,
+                    output_message_id=delivered_id,
+                    needs_attention=needs_attention,
+                )
+            else:
+                finished = self.runs.finish(
+                    run["id"],
+                    "failed",
+                    task_id=result.task_id,
+                    output_text=result.agent.content,
+                    error_type="DeliveryError",
+                    error_message=delivery_error,
+                    needs_attention=True,
+                )
         except KeyboardInterrupt:
             finished = self.runs.finish(run["id"], "interrupted", error_type="KeyboardInterrupt", error_message="automation interrupted")
         except Exception as error:
@@ -197,6 +246,29 @@ class AutomationService:
             session_id=job["session_id"],
         )
         return finished
+
+    def _denied_side_effects(self, session_id: str, task_id: str) -> bool:
+        if self._approvals is None:
+            return False
+        return any(
+            record["decision"] == "denied"
+            for record in self._approvals.list_for_task(session_id, task_id)
+        )
+
+    def _deliver(self, job: dict[str, Any], text: str) -> tuple[str | None, str | None]:
+        if job["destination_connector_id"] is None:
+            return None, None
+        if self._deliver_fn is None:
+            return None, "no delivery channel is available in this process"
+        try:
+            message_id = self._deliver_fn(
+                job["destination_connector_id"],
+                job["destination_conversation_id"],
+                text,
+            )
+        except Exception as error:
+            return None, f"{type(error).__name__}: {str(error)[:160]}"
+        return message_id, None
 
     def _advance(self, job: dict[str, Any], run: dict[str, Any]) -> None:
         now = self._now().astimezone(UTC)

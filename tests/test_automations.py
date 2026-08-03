@@ -15,6 +15,7 @@ from allpath_agent.storage import (
     AutomationRunRepository,
     Database,
     SessionRepository,
+    ToolApprovalRepository,
 )
 
 
@@ -229,6 +230,140 @@ class AutomationCliParserTestCase(unittest.TestCase):
         self.assertEqual((created, listed), (0, 0))
         self.assertIn("Created one-time automation", output.getvalue())
         self.assertIn("Reminder", output.getvalue())
+
+
+class AutomationDeliveryTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.database = Database(Path(self.temporary_directory.name) / "state.db")
+        self.database.initialize()
+        self.sessions = SessionRepository(self.database)
+        self.jobs = AutomationJobRepository(self.database)
+        self.runs = AutomationRunRepository(self.database)
+        self.now = datetime(2026, 7, 20, 15, 0, tzinfo=UTC)
+
+    def tearDown(self) -> None:
+        self.temporary_directory.cleanup()
+
+    def _due_job(self, destination: tuple[str, str] | None = ("telegram", "chat-9")):
+        session = self.sessions.create("automation:test")
+        connector, conversation = destination if destination else (None, None)
+        return self.jobs.create(
+            name="Due task",
+            prompt="Prepare update",
+            schedule_kind="once",
+            schedule_expression="2026-07-20T14:00:00+00:00",
+            timezone="UTC",
+            session_id=session.id,
+            next_run_at="2026-07-20T14:00:00+00:00",
+            destination_connector_id=connector,
+            destination_conversation_id=conversation,
+        )
+
+    def test_creation_persists_destination_and_model_role(self) -> None:
+        service = AutomationService(self.jobs, self.runs, self.sessions, now=lambda: self.now)
+
+        job = service.create_cron(
+            "Brief",
+            "Prepare my brief",
+            "0 8 * * 1-5",
+            "UTC",
+            destination_connector_id="telegram",
+            destination_conversation_id="chat-9",
+        )
+
+        self.assertEqual(job["destination_connector_id"], "telegram")
+        self.assertEqual(job["destination_conversation_id"], "chat-9")
+        self.assertEqual(job["model_role"], "auto")
+
+    def test_successful_delivery_records_message_id(self) -> None:
+        self._due_job()
+        sent = []
+
+        def deliver(connector_id: str, conversation_id: str, text: str) -> str:
+            sent.append((connector_id, conversation_id, text))
+            return "msg-42"
+
+        service = AutomationService(
+            self.jobs, self.runs, self.sessions, FakeApplication(),
+            now=lambda: self.now, deliver=deliver,
+        )
+
+        run = service.tick()
+
+        self.assertEqual(run["status"], "succeeded")
+        self.assertEqual(run["output_message_id"], "msg-42")
+        self.assertFalse(run["needs_attention"])
+        self.assertEqual(sent, [("telegram", "chat-9", "done: Prepare update")])
+
+    def test_delivery_failure_marks_run_failed_and_keeps_output(self) -> None:
+        self._due_job()
+
+        def deliver(connector_id: str, conversation_id: str, text: str) -> str:
+            raise RuntimeError("network down")
+
+        service = AutomationService(
+            self.jobs, self.runs, self.sessions, FakeApplication(),
+            now=lambda: self.now, deliver=deliver,
+        )
+
+        run = service.tick()
+
+        self.assertEqual(run["status"], "failed")
+        self.assertEqual(run["error_type"], "DeliveryError")
+        self.assertIn("network down", run["error_message"])
+        self.assertEqual(run["output_text"], "done: Prepare update")
+        self.assertTrue(run["needs_attention"])
+
+    def test_destination_without_deliverer_fails_loudly(self) -> None:
+        self._due_job()
+        service = AutomationService(
+            self.jobs, self.runs, self.sessions, FakeApplication(), now=lambda: self.now
+        )
+
+        run = service.tick()
+
+        self.assertEqual(run["status"], "failed")
+        self.assertEqual(run["error_type"], "DeliveryError")
+        self.assertEqual(run["output_text"], "done: Prepare update")
+
+    def test_no_destination_never_calls_deliverer(self) -> None:
+        self._due_job(destination=None)
+
+        def deliver(connector_id: str, conversation_id: str, text: str) -> str:
+            raise AssertionError("deliverer must not be called without a destination")
+
+        service = AutomationService(
+            self.jobs, self.runs, self.sessions, FakeApplication(),
+            now=lambda: self.now, deliver=deliver,
+        )
+
+        run = service.tick()
+
+        self.assertEqual(run["status"], "succeeded")
+        self.assertIsNone(run["output_message_id"])
+
+    def test_denied_side_effect_marks_needs_attention(self) -> None:
+        self._due_job(destination=None)
+        approvals = ToolApprovalRepository(self.database)
+
+        class DenyingApplication(FakeApplication):
+            def send(self, session_id: str, message: str):
+                approvals.record(
+                    session_id, "task-1", "terminal", {"argv": ["rm"]},
+                    "denied", "unattended run",
+                )
+                return super().send(session_id, message)
+
+        service = AutomationService(
+            self.jobs, self.runs, self.sessions, DenyingApplication(),
+            now=lambda: self.now, approvals=approvals,
+        )
+
+        run = service.tick()
+
+        self.assertEqual(run["status"], "succeeded")
+        self.assertTrue(run["needs_attention"])
 
 
 if __name__ == "__main__":

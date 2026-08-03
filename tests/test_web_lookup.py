@@ -112,6 +112,24 @@ class WebLookupTestCase(unittest.TestCase):
                 )
         self.assertEqual(recorded, ["http://192.168.0.1/internal"])
 
+    def test_unknown_charset_falls_back_to_utf8(self) -> None:
+        body = b"<html><body><p>Hello world</p></body></html>"
+        registry = _registry_with_fake(
+            {
+                "https://example.com/bad-charset": (
+                    200,
+                    "text/html; charset=bogus-charset-name",
+                    body,
+                    "https://example.com/bad-charset",
+                )
+            }
+        )
+
+        with patch("allpath_agent.tools.web.validate_public_url", side_effect=lambda url: url):
+            result = _call(registry, "https://example.com/bad-charset")
+
+        self.assertIn("Hello world", result["content"])
+
     def test_extractor_collapses_whitespace(self) -> None:
         title, text = _extract_html_text("<body><p>a\n\n   b</p><div>c</div></body>")
         self.assertIsNone(title)

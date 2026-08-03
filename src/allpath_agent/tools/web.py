@@ -100,7 +100,10 @@ def register_web_tools(registry: ToolRegistry, fetch: Fetcher | None = None) -> 
         if "charset=" in content_type:
             charset = content_type.split("charset=", 1)[1].split(";", 1)[0].strip() or "utf-8"
         truncated_body = body[:MAX_BODY_BYTES]
-        text = truncated_body.decode(charset, errors="replace")
+        try:
+            text = truncated_body.decode(charset, errors="replace")
+        except LookupError:
+            text = truncated_body.decode("utf-8", errors="replace")
         title: str | None = None
         if media_type in {"text/html", "application/xhtml+xml"}:
             title, text = _extract_html_text(text)

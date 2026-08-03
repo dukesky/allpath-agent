@@ -204,7 +204,6 @@ class AutomationService:
     ) -> dict[str, Any]:
         self.runs.start(run["id"])
         try:
-            self.application.start_session(job["session_id"])
             result = self.application.send(job["session_id"], job["prompt"], record_curriculum=False)
             needs_attention = self._denied_side_effects(job["session_id"], result.task_id)
             delivered_id, delivery_error = self._deliver(job, result.agent.content)

@@ -552,10 +552,8 @@ def _chat(
             if automation_result.completed:
                 application.record_capability_success("scheduled_automations")
                 jobs = AutomationJobRepository(database).list_all()
-                if jobs:
-                    newest = max(jobs, key=lambda job: job["created_at"])
-                    if newest["schedule_kind"] == "cron" and newest["destination_connector_id"]:
-                        application.record_capability_success("daily_briefing")
+                if _completed_daily_briefing(jobs):
+                    application.record_capability_success("daily_briefing")
             continue
 
         connection_result = connection_workflow.handle(
@@ -958,6 +956,13 @@ def _test_connectors(home: Path, configs: ConnectorConfigRepository, output: Out
         output(f"  runtime: {diagnostic.runtime}")
         output(f"  next: {diagnostic.action}")
     return 0
+
+
+def _completed_daily_briefing(jobs: list[dict]) -> bool:
+    if not jobs:
+        return False
+    newest = max(jobs, key=lambda job: job["created_at"])
+    return bool(newest["schedule_kind"] == "cron" and newest["destination_connector_id"])
 
 
 def _requests_telegram_setup(message: str) -> bool:

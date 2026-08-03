@@ -11,7 +11,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from allpath_agent.cli.main import _chat, _run_connection_selectors, _run_gateway
+from allpath_agent.cli.main import (
+    _chat,
+    _completed_daily_briefing,
+    _run_connection_selectors,
+    _run_gateway,
+)
 from allpath_agent.config import ConfigError, load_config
 from allpath_agent.hooks import HookBus
 from allpath_agent.storage import (
@@ -469,6 +474,30 @@ class CliInterruptTestCase(unittest.TestCase):
             "No active connectors or enabled automations",
             str(context.exception),
         )
+
+
+class CompletedDailyBriefingTestCase(unittest.TestCase):
+    def test_empty_job_list_is_not_completed(self) -> None:
+        self.assertFalse(_completed_daily_briefing([]))
+
+    def test_single_job_without_destination_is_not_completed(self) -> None:
+        jobs = [
+            {"created_at": "2026-07-20T00:00:00+00:00", "schedule_kind": "once", "destination_connector_id": None}
+        ]
+        self.assertFalse(_completed_daily_briefing(jobs))
+
+    def test_cron_job_without_destination_is_not_completed(self) -> None:
+        jobs = [
+            {"created_at": "2026-07-20T00:00:00+00:00", "schedule_kind": "cron", "destination_connector_id": None}
+        ]
+        self.assertFalse(_completed_daily_briefing(jobs))
+
+    def test_newest_cron_job_with_destination_is_completed(self) -> None:
+        jobs = [
+            {"created_at": "2026-07-19T00:00:00+00:00", "schedule_kind": "once", "destination_connector_id": None},
+            {"created_at": "2026-07-20T00:00:00+00:00", "schedule_kind": "cron", "destination_connector_id": "telegram"},
+        ]
+        self.assertTrue(_completed_daily_briefing(jobs))
 
 
 if __name__ == "__main__":

@@ -145,5 +145,4 @@ def default_capabilities() -> list[Capability]:
                 "with web_lookup and deliver the summary to your connected channel every morning."
             ),
         ),
-
     ]

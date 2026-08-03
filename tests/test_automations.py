@@ -103,7 +103,7 @@ class AutomationLifecycleTestCase(unittest.TestCase):
         self.assertEqual(run["output_text"], "done: Prepare update")
         self.assertIsNone(second)
         self.assertFalse(self.jobs.get(job["id"])["enabled"])
-        self.assertEqual(application.started, [session.id])
+        self.assertEqual(application.started, [])
 
     def test_recurring_job_coalesces_missed_runs_and_schedules_future(self) -> None:
         session = self.sessions.create("automation:daily")

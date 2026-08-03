@@ -38,7 +38,7 @@ from allpath_agent.workflows.provider_connection import (
     _write_config_atomic,
 )
 
-from tests.test_cli import ROOT, run_cli
+from tests.test_cli import run_cli
 
 
 class FakeTelegramConnector:
@@ -66,8 +66,10 @@ class FakeTelegramConnector:
 
 
 class GoldenPathTestCase(unittest.TestCase):
-    def test_model_to_telegram_daily_briefing_end_to_end(self) -> None:
+    def setUp(self) -> None:
         FakeTelegramConnector.sent = []
+
+    def test_model_to_telegram_daily_briefing_end_to_end(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
             fake_bin = self._install_fake_claude(home)
@@ -134,6 +136,52 @@ class GoldenPathTestCase(unittest.TestCase):
 
             suggestions = CapabilitySuggestionRepository(database)
             self.assertIsNone(suggestions.get_for_session(job["session_id"]))
+
+            with database.connect() as connection:
+                curriculum_row = connection.execute(
+                    "SELECT 1 FROM curriculum_sessions WHERE session_id = ?",
+                    (job["session_id"],),
+                ).fetchone()
+            self.assertIsNone(curriculum_row)
+
+    def test_tick_falls_back_when_delivery_channels_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            fake_bin = self._install_fake_claude(home)
+            database = Database(home / "state.db")
+            database.initialize()
+
+            # Telegram is configured ACTIVE but the bot token secret was never
+            # stored, so _active_connector_instances raises ConfigError and the
+            # tick path must fall back to running jobs without a destination.
+            ConnectorConfigRepository(database).save("telegram", "active", "@fake_bot")
+
+            session = SessionRepository(database).create(title="automation:local-only")
+            job = AutomationJobRepository(database).create(
+                name="Local only",
+                prompt="Summarize local state",
+                schedule_kind="once",
+                schedule_expression="2020-01-01T00:00:00+00:00",
+                timezone="UTC",
+                session_id=session.id,
+                next_run_at="2020-01-01T00:00:00+00:00",
+            )
+
+            buffer = StringIO()
+            previous_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = f"{fake_bin}:{previous_path}"
+            try:
+                with redirect_stdout(buffer):
+                    exit_code = main(["--home", str(home), "automations", "tick"])
+            finally:
+                os.environ["PATH"] = previous_path
+
+            self.assertEqual(exit_code, 0, buffer.getvalue())
+            self.assertIn("Delivery channels unavailable", buffer.getvalue())
+
+            runs = AutomationRunRepository(database).list_for_job(job["id"])
+            self.assertEqual(len(runs), 1)
+            self.assertEqual(runs[0]["status"], "succeeded")
 
     def _install_fake_claude(self, home: Path) -> Path:
         # Mirror tests/test_cli.py's fake-claude pattern: a stub executable on

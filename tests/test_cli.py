@@ -259,6 +259,7 @@ class CliEndToEndTestCase(unittest.TestCase):
         self.assertIn("provider=claude-code", result.stdout)
         success_tail = result.stdout.split("Switching to live model sonnet now.", 1)[1]
         self.assertNotIn("Try: 连接模型", success_tail)
+        self.assertIn("Connect a messaging channel", success_tail)
 
     def test_starter_understands_natural_arithmetic(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

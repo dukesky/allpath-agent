@@ -13,7 +13,7 @@ ART = (
 
 
 CAPABILITY_HINTS = {
-    "messaging_connectors": "Connect a messaging channel: try \"connect Telegram\"",
+    "messaging_connectors": "Connect a messaging channel: try “connect Telegram”",
     "durable_memory": "Try: remember that I prefer concise answers",
     "current_time": "Try: what time is it in Asia/Shanghai?",
     "session_management": "Explore: /sessions and /new",
@@ -100,3 +100,4 @@ def launch_lines(
     )
     lines.append(f"  Next: {hint if hint is not None else 'Explore: /capabilities'}")
     return tuple(lines)
+

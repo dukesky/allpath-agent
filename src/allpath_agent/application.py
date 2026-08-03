@@ -60,10 +60,17 @@ class AgentApplication:
     def capability_progress(self) -> list[tuple[str, str, str]]:
         return self._curriculum.list_progress()
 
-    def send(self, session_id: str, message: str) -> ApplicationResult:
+    def send(
+        self,
+        session_id: str,
+        message: str,
+        *,
+        record_curriculum: bool = True,
+    ) -> ApplicationResult:
         task_id = str(uuid4())
         intents = detect_intents(message)
-        self._record_curriculum_attempts(intents)
+        if record_curriculum:
+            self._record_curriculum_attempts(intents)
         signals = analyze_task(message)
         decision = self._router.route(signals)
         self._routing_decisions.record(
@@ -82,12 +89,14 @@ class AgentApplication:
             _runtime_system_prompt(self._system_prompt, decision.profile),
             decision.profile,
         )
-        evidence = self._task_evidence(session_id, task_id, decision.profile.name)
-        suggestion = self._curriculum.after_task(
-            session_id,
-            intents,
-            evidence,
-        )
+        suggestion = None
+        if record_curriculum:
+            evidence = self._task_evidence(session_id, task_id, decision.profile.name)
+            suggestion = self._curriculum.after_task(
+                session_id,
+                intents,
+                evidence,
+            )
         return ApplicationResult(result, task_id, decision.reason, suggestion)
 
     def _record_curriculum_attempts(self, intents: set[str]) -> None:

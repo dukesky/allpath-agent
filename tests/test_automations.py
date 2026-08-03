@@ -28,8 +28,8 @@ class FakeApplication:
     def start_session(self, session_id: str) -> None:
         self.started.append(session_id)
 
-    def send(self, session_id: str, message: str):
-        self.messages.append((session_id, message))
+    def send(self, session_id: str, message: str, *, record_curriculum: bool = True):
+        self.messages.append((session_id, message, record_curriculum))
         if self.error:
             raise self.error
         return SimpleNamespace(task_id="task-1", agent=SimpleNamespace(content=f"done: {message}"))
@@ -192,6 +192,70 @@ class AutomationLifecycleTestCase(unittest.TestCase):
             service.tick()
 
         self.assertEqual(self.runs.list_for_job(job["id"]), [])
+
+    def test_unattended_runs_suppress_curriculum_recording(self) -> None:
+        session = self.sessions.create("automation:test")
+        self.jobs.create(
+            name="Due task",
+            prompt="Prepare update",
+            schedule_kind="once",
+            schedule_expression="2026-07-20T14:00:00+00:00",
+            timezone="UTC",
+            session_id=session.id,
+            next_run_at="2026-07-20T14:00:00+00:00",
+        )
+        application = FakeApplication()
+        service = AutomationService(
+            self.jobs, self.runs, self.sessions, application, now=lambda: self.now
+        )
+
+        service.tick()
+
+        self.assertEqual(
+            application.messages,
+            [(session.id, "Prepare update", False)],
+        )
+
+    def test_broken_cron_schedule_disables_job_instead_of_crashing(self) -> None:
+        session = self.sessions.create("automation:test")
+        job = self.jobs.create(
+            name="Broken",
+            prompt="Prepare update",
+            schedule_kind="cron",
+            schedule_expression="0 8 * * *",
+            timezone="Mars/Olympus",
+            session_id=session.id,
+            next_run_at="2026-07-20T14:00:00+00:00",
+        )
+        service = AutomationService(
+            self.jobs, self.runs, self.sessions, FakeApplication(), now=lambda: self.now
+        )
+
+        run = service.tick()
+
+        self.assertEqual(run["status"], "succeeded")
+        refreshed = self.jobs.get(job["id"])
+        self.assertFalse(refreshed["enabled"])
+        self.assertIsNone(refreshed["next_run_at"])
+
+    def test_run_records_return_boolean_needs_attention(self) -> None:
+        session = self.sessions.create("automation:test")
+        self.jobs.create(
+            name="Due task",
+            prompt="Prepare update",
+            schedule_kind="once",
+            schedule_expression="2026-07-20T14:00:00+00:00",
+            timezone="UTC",
+            session_id=session.id,
+            next_run_at="2026-07-20T14:00:00+00:00",
+        )
+        service = AutomationService(
+            self.jobs, self.runs, self.sessions, FakeApplication(), now=lambda: self.now
+        )
+
+        run = service.tick()
+
+        self.assertIs(run["needs_attention"], False)
 
 
 class AutomationCliParserTestCase(unittest.TestCase):
@@ -369,12 +433,12 @@ class AutomationDeliveryTestCase(unittest.TestCase):
         approvals = ToolApprovalRepository(self.database)
 
         class DenyingApplication(FakeApplication):
-            def send(self, session_id: str, message: str):
+            def send(self, session_id: str, message: str, *, record_curriculum: bool = True):
                 approvals.record(
                     session_id, "task-1", "terminal", {"argv": ["rm"]},
                     "denied", "unattended run",
                 )
-                return super().send(session_id, message)
+                return super().send(session_id, message, record_curriculum=record_curriculum)
 
         service = AutomationService(
             self.jobs, self.runs, self.sessions, DenyingApplication(),

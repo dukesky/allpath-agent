@@ -1080,6 +1080,9 @@ def _run_gateway(
                 processed = runtime.poll_once(connector_id)
                 if processed:
                     output(f"{connector_id}: processed {processed} message(s)")
+            # Termination invariant: each tick either advances next_run_at strictly
+            # forward or disables the job, and claim_due cannot re-claim a
+            # (job, scheduled_for) pair, so this drain loop always reaches None.
             while True:
                 automation_run = automation_service.tick()
                 if automation_run is None:
@@ -1180,7 +1183,11 @@ def _manage_automations(home: Path, database: Database, args: argparse.Namespace
             output,
             interactive_approvals=False,
         )
-        registry = ConnectorRegistry(tuple(_active_connector_instances(home, database)))
+        try:
+            registry = ConnectorRegistry(tuple(_active_connector_instances(home, database)))
+        except ConfigError as error:
+            output(f"Delivery channels unavailable: {error}. Jobs without destinations still run.")
+            registry = ConnectorRegistry(())
         service = AutomationService(
             jobs,
             runs,

@@ -17,7 +17,7 @@ from allpath_agent.hooks import HookBus
 class AutomationApplication(Protocol):
     def start_session(self, session_id: str) -> None: ...
 
-    def send(self, session_id: str, message: str) -> Any: ...
+    def send(self, session_id: str, message: str, *, record_curriculum: bool = True) -> Any: ...
 
 
 Deliverer = Callable[[str, str, str], str]
@@ -205,7 +205,7 @@ class AutomationService:
         self.runs.start(run["id"])
         try:
             self.application.start_session(job["session_id"])
-            result = self.application.send(job["session_id"], job["prompt"])
+            result = self.application.send(job["session_id"], job["prompt"], record_curriculum=False)
             needs_attention = self._denied_side_effects(job["session_id"], result.task_id)
             delivered_id, delivery_error = self._deliver(job, result.agent.content)
             if delivery_error is None:
@@ -280,8 +280,17 @@ class AutomationService:
                 disable=True,
             )
             return
-        schedule = parse_cron(job["schedule_expression"], job["timezone"])
-        next_run = schedule.next_after(max(now, datetime.fromisoformat(run["scheduled_for"])))
+        try:
+            schedule = parse_cron(job["schedule_expression"], job["timezone"])
+            next_run = schedule.next_after(max(now, datetime.fromisoformat(run["scheduled_for"])))
+        except ValueError:
+            self.jobs.complete_schedule(
+                job["id"],
+                last_run_at=run["scheduled_for"],
+                next_run_at=None,
+                disable=True,
+            )
+            return
         self.jobs.complete_schedule(
             job["id"],
             last_run_at=run["scheduled_for"],

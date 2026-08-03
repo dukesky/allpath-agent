@@ -839,7 +839,7 @@ class AutomationRunRepository:
             row = connection.execute(
                 "SELECT * FROM automation_runs WHERE id = ?", (run_id,)
             ).fetchone()
-        return dict(row) if row else None
+        return _automation_run_record(row) if row else None
 
     def list_for_job(self, job_id: str) -> list[dict[str, Any]]:
         with self._database.connect() as connection:
@@ -847,10 +847,16 @@ class AutomationRunRepository:
                 "SELECT * FROM automation_runs WHERE job_id = ? ORDER BY scheduled_for, id",
                 (job_id,),
             ).fetchall()
-        return [dict(row) for row in rows]
+        return [_automation_run_record(row) for row in rows]
 
 
 def _automation_job_record(row: Any) -> dict[str, Any]:
     record = dict(row)
     record["enabled"] = bool(record["enabled"])
+    return record
+
+
+def _automation_run_record(row: Any) -> dict[str, Any]:
+    record = dict(row)
+    record["needs_attention"] = bool(record.get("needs_attention", 0))
     return record

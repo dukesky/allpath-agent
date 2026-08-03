@@ -16,6 +16,7 @@ from allpath_agent.curriculum import CurriculumEngine, CurriculumService, defaul
 from allpath_agent.connectors import (
     ConnectorRegistry,
     ConnectorRuntime,
+    OutboundMessage,
     SlackConnector,
     TelegramConnector,
     WhatsAppConnector,
@@ -956,20 +957,9 @@ def _requests_browser_setup(message: str) -> bool:
     )
 
 
-def _run_gateway(
-    home: Path,
-    database: Database,
-    once: bool,
-    poll_interval: float,
-    output: Output,
-    error_output: Output,
-) -> int:
-    if poll_interval < 0:
-        raise ConfigError("gateway poll interval cannot be negative")
+def _active_connector_instances(home: Path, database: Database) -> list:
     configs = ConnectorConfigRepository(database).list_all()
     active_ids = {record["connector_id"] for record in configs if record["status"] == "active"}
-    if not active_ids:
-        raise ConfigError("No active connectors. Connect Telegram, Slack, or WhatsApp in Allpath first")
     secrets = SecretStore(home / "secrets.json").values()
     connectors = []
     if "telegram" in active_ids:
@@ -993,6 +983,33 @@ def _run_gateway(
         connectors.append(
             WhatsAppConnector(access_token, phone_number_id, app_secret, verify_token)
         )
+    return connectors
+
+
+def _registry_deliverer(registry: ConnectorRegistry):
+    def deliver(connector_id: str, conversation_id: str, text: str) -> str:
+        connector = registry.get(connector_id)
+        return connector.send(OutboundMessage(conversation_id=conversation_id, text=text))
+
+    return deliver
+
+
+def _run_gateway(
+    home: Path,
+    database: Database,
+    once: bool,
+    poll_interval: float,
+    output: Output,
+    error_output: Output,
+) -> int:
+    if poll_interval < 0:
+        raise ConfigError("gateway poll interval cannot be negative")
+    connectors = _active_connector_instances(home, database)
+    enabled_jobs = [job for job in AutomationJobRepository(database).list_all() if job["enabled"]]
+    if not connectors and not enabled_jobs:
+        raise ConfigError(
+            "No active connectors or enabled automations. Connect a channel or create an automation first"
+        )
     statuses = [connector.status() for connector in connectors]
     failed = next((status for status in statuses if not status.connected), None)
     if failed:
@@ -1012,7 +1029,19 @@ def _run_gateway(
         SessionRepository(database),
         ConnectorSessionRepository(database),
     )
-    output("Allpath gateway running: " + ", ".join(f"{status.id} {status.detail}" for status in statuses))
+    automation_service = AutomationService(
+        AutomationJobRepository(database),
+        AutomationRunRepository(database),
+        SessionRepository(database),
+        application,
+        hooks=application.hooks,
+        approvals=ToolApprovalRepository(database),
+        deliver=_registry_deliverer(registry),
+    )
+    if statuses:
+        output("Allpath gateway running: " + ", ".join(f"{status.id} {status.detail}" for status in statuses))
+    else:
+        output("Allpath gateway running: automations only (no messaging connectors)")
     output("Side-effecting tools are denied unless a channel-safe approval flow is added.")
     try:
         runtime.start_all()
@@ -1021,6 +1050,14 @@ def _run_gateway(
                 processed = runtime.poll_once(connector_id)
                 if processed:
                     output(f"{connector_id}: processed {processed} message(s)")
+            while True:
+                automation_run = automation_service.tick()
+                if automation_run is None:
+                    break
+                note = " (needs attention)" if automation_run["needs_attention"] else ""
+                output(
+                    f"automation run {automation_run['id']}: {automation_run['status']}{note}"
+                )
             if once:
                 return 0
             time.sleep(poll_interval)
@@ -1113,12 +1150,15 @@ def _manage_automations(home: Path, database: Database, args: argparse.Namespace
             output,
             interactive_approvals=False,
         )
+        registry = ConnectorRegistry(tuple(_active_connector_instances(home, database)))
         service = AutomationService(
             jobs,
             runs,
             sessions,
             application,
             hooks=getattr(application, "hooks", None),
+            approvals=ToolApprovalRepository(database),
+            deliver=_registry_deliverer(registry),
         )
         if args.action == "run":
             _require_automation_args(args, "job_id")
@@ -1130,7 +1170,8 @@ def _manage_automations(home: Path, database: Database, args: argparse.Namespace
                 return 0
         else:
             raise ValueError(f"unknown automation action: {args.action}")
-        output(f"Automation run {run['id']}: {run['status']}")
+        note = " (needs attention)" if run["needs_attention"] else ""
+        output(f"Automation run {run['id']}: {run['status']}{note}")
         if run["output_text"]:
             output(run["output_text"])
         if run["error_message"]:

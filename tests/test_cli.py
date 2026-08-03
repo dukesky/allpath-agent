@@ -8,10 +8,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from allpath_agent.cli.main import _chat, _run_connection_selectors, _run_gateway
-from allpath_agent.config import load_config
+from allpath_agent.config import ConfigError, load_config
+from allpath_agent.hooks import HookBus
 from allpath_agent.storage import (
     CapabilityProgressRepository,
     Database,
@@ -446,12 +448,27 @@ class CliInterruptTestCase(unittest.TestCase):
 
             with patch("allpath_agent.cli.main.TelegramConnector", return_value=FakeTelegram()), patch(
                 "allpath_agent.cli.main._build_application",
-                return_value=object(),
+                return_value=SimpleNamespace(hooks=HookBus()),
             ):
                 result = _run_gateway(home, database, True, 0, outputs.append, outputs.append)
 
         self.assertEqual(result, 0)
         self.assertTrue(any("@test_bot" in message for message in outputs))
+
+    def test_gateway_once_requires_connectors_or_automations(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            database = Database(home / "state.db")
+            database.initialize()
+            outputs = []
+
+            with self.assertRaises(ConfigError) as context:
+                _run_gateway(home, database, True, 0, outputs.append, outputs.append)
+
+        self.assertIn(
+            "No active connectors or enabled automations",
+            str(context.exception),
+        )
 
 
 if __name__ == "__main__":

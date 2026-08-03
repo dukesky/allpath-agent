@@ -205,6 +205,27 @@ class AutomationCliParserTestCase(unittest.TestCase):
         self.assertEqual(once.timezone, "UTC")
         self.assertEqual(run.job_id, "job-1")
 
+    def test_parses_add_cron_with_destination(self) -> None:
+        cron = build_parser().parse_args(
+            [
+                "automations",
+                "add-cron",
+                "--name",
+                "x",
+                "--prompt",
+                "y",
+                "--cron",
+                "0 8 * * 1-5",
+                "--connector",
+                "telegram",
+                "--conversation",
+                "chat-9",
+            ]
+        )
+
+        self.assertEqual(cron.connector, "telegram")
+        self.assertEqual(cron.conversation, "chat-9")
+
     def test_cli_creates_and_lists_one_time_job_without_model_config(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output = StringIO()

@@ -13,6 +13,18 @@ from allpath_agent.storage import (
     ToolExecutionRepository,
 )
 
+ALLPATH_COMMANDS = (
+    "Allpath built-in conversational flows (handled by deterministic code outside this model): "
+    "“connect a model” configures a model provider; “connect Telegram”, “connect Slack”, and "
+    "“connect WhatsApp” run guided messaging-channel setup; “create automation” (or /automations add) "
+    "schedules one-time or recurring jobs with optional delivery to a connected channel; "
+    "“setup browser” prepares the structured browser. "
+    "Slash commands: /help, /model, /models, /route, /sessions, /connectors, /automations, /skills, "
+    "/mcp, /browser, /capabilities, /dismiss. "
+    "When the user wants one of these capabilities, do not claim it is unavailable — reply with the exact "
+    "phrase or command to type."
+)
+
 
 @dataclass(frozen=True)
 class ApplicationResult:
@@ -214,7 +226,8 @@ def _runtime_system_prompt(system_prompt: str, profile: ModelProfile) -> str:
         "Runtime identity (authoritative): "
         f"role={profile.name}, provider={profile.provider}, model={profile.model}. "
         f"{tool_access}{external_boundary} "
-        "When asked which model or permissions are active, report these exact values and do not guess."
+        "When asked which model or permissions are active, report these exact values and do not guess.\n\n"
+        f"{ALLPATH_COMMANDS}"
     )
 
 

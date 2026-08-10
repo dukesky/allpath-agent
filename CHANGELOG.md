@@ -6,6 +6,12 @@ The format follows Keep a Changelog conventions. During development, changes acc
 
 ## Unreleased
 
+### Fixed
+
+- Answered connector state questions ("have we connected Telegram?" / "连了吗") with the actual connection status instead of hijacking them into the setup tutorial, and stopped re-teaching channels that are already connected unless the user says "reconnect".
+- Gave mid-tutorial replies a current-status line and an explicit "cancel" exit so users are never trapped in a setup flow.
+- Listed Allpath's built-in conversational flows and slash commands in the static system prompt so the model directs users to the exact phrase instead of claiming the capability is unavailable.
+
 ## [0.4.0] - 2026-08-02
 
 ### Added

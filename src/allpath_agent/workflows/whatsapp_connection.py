@@ -6,7 +6,13 @@ from allpath_agent.connectors import verify_whatsapp_credentials
 from allpath_agent.secrets import SecretStore
 from allpath_agent.storage import ConnectorConfigRepository, WorkflowRunRepository
 
-from .connector_onboarding import ConnectorOnboardingGuide, OnboardingStep
+from .connector_onboarding import (
+    ConnectorOnboardingGuide,
+    OnboardingStep,
+    connection_status_reply,
+    is_reconnect_request,
+    is_state_question,
+)
 from .provider_connection import ConnectionFlowResult
 
 
@@ -188,6 +194,13 @@ class WhatsAppConnectionWorkflow:
             if not _is_trigger(message):
                 return ConnectionFlowResult(False)
             language = "zh" if any("\u4e00" <= char <= "\u9fff" for char in message) else "en"
+            record = self._configs.get("whatsapp")
+            already_active = record is not None and record["status"] == "active"
+            if is_state_question(message) or (already_active and not is_reconnect_request(message)):
+                return ConnectionFlowResult(
+                    True,
+                    (connection_status_reply("WhatsApp", record, language),),
+                )
             first_step = GUIDE.first_id()
             self._runs.create(WORKFLOW_ID, session_id, first_step, {"language": language})
             return ConnectionFlowResult(True, (GUIDE.render(first_step, language),))
@@ -219,7 +232,20 @@ class WhatsAppConnectionWorkflow:
                 return ConnectionFlowResult(True, (message,), completed=True)
             self._runs.update(active["id"], next_step, active["state"])
             return ConnectionFlowResult(True, (GUIDE.render(next_step, language),))
-        reminder = "完成当前步骤后输入“继续”；也可以输入“返回”“状态”或“取消”。" if language == "zh" else "Finish the current step, then type “continue”; or use “back”, “status”, or “cancel”."
+        record = self._configs.get("whatsapp")
+        connected = record is not None and record["status"] == "active"
+        if language == "zh":
+            status_line = "WhatsApp 当前已连接。" if connected else "WhatsApp 当前未连接。"
+            reminder = (
+                f"{status_line}教程进行中：完成当前步骤后输入“继续”，"
+                "或输入“返回”“状态”查看；输入“取消”可随时退出教程并恢复正常对话。"
+            )
+        else:
+            status_line = "WhatsApp is currently connected." if connected else "WhatsApp is not connected yet."
+            reminder = (
+                f"{status_line} Tutorial in progress: finish the current step and type “continue”, "
+                "or use “back”/“status”; type “cancel” anytime to leave the tutorial and chat normally."
+            )
         return ConnectionFlowResult(True, (reminder,))
 
     def submit_secret(self, session_id: str, secret: str) -> ConnectionFlowResult:

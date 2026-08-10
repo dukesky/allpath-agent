@@ -97,6 +97,56 @@ class TelegramConnectionWorkflowTestCase(unittest.TestCase):
         self.assertIn("[2/4]", status.messages[0])
         self.assertIn("Telegram 设置 2/4", resumed.input_hint(self.session.id))
 
+    def test_state_question_returns_status_instead_of_tutorial(self) -> None:
+        workflow = TelegramConnectionWorkflow(self.runs, self.secrets, self.configs, verifier=lambda token: "@bot")
+
+        result = workflow.handle(self.session.id, "have we connect telegram right now?")
+
+        self.assertTrue(result.handled)
+        self.assertIn("not connected", "\n".join(result.messages).lower())
+        self.assertFalse(workflow.active(self.session.id))
+
+    def test_chinese_state_question_reports_active_connection(self) -> None:
+        self.configs.save("telegram", "active", "@my_bot")
+        workflow = TelegramConnectionWorkflow(self.runs, self.secrets, self.configs, verifier=lambda token: "@bot")
+
+        result = workflow.handle(self.session.id, "你看看我现在连接telegram了吗")
+
+        self.assertTrue(result.handled)
+        self.assertIn("已连接", "\n".join(result.messages))
+        self.assertIn("@my_bot", "\n".join(result.messages))
+        self.assertFalse(workflow.active(self.session.id))
+
+    def test_trigger_with_active_connection_reports_status_not_tutorial(self) -> None:
+        self.configs.save("telegram", "active", "@my_bot")
+        workflow = TelegramConnectionWorkflow(self.runs, self.secrets, self.configs, verifier=lambda token: "@bot")
+
+        result = workflow.handle(self.session.id, "connect telegram")
+
+        self.assertTrue(result.handled)
+        self.assertIn("@my_bot", "\n".join(result.messages))
+        self.assertFalse(workflow.active(self.session.id))
+
+    def test_reconnect_starts_tutorial_despite_active_connection(self) -> None:
+        self.configs.save("telegram", "active", "@my_bot")
+        workflow = TelegramConnectionWorkflow(self.runs, self.secrets, self.configs, verifier=lambda token: "@bot")
+
+        result = workflow.handle(self.session.id, "reconnect telegram")
+
+        self.assertTrue(result.handled)
+        self.assertTrue(workflow.active(self.session.id))
+
+    def test_mid_tutorial_question_mentions_cancel_and_status(self) -> None:
+        workflow = TelegramConnectionWorkflow(self.runs, self.secrets, self.configs, verifier=lambda token: "@bot")
+        workflow.handle(self.session.id, "连接 Telegram")
+
+        result = workflow.handle(self.session.id, "你看看我连了吗，连了就不用继续了")
+
+        text = "\n".join(result.messages)
+        self.assertIn("取消", text)
+        self.assertIn("未连接", text)
+        self.assertTrue(workflow.active(self.session.id))
+
 
 if __name__ == "__main__":
     unittest.main()

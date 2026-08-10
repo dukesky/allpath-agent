@@ -100,3 +100,22 @@ class WhatsAppConnectionWorkflowTestCase(unittest.TestCase):
 
         self.assertIn("[7/9]", status.messages[0])
         self.assertIn("WhatsApp 设置 7/9", resumed.input_hint(self.session.id))
+
+    def test_state_question_returns_status_instead_of_tutorial(self) -> None:
+        workflow = WhatsAppConnectionWorkflow(self.runs, self.secrets, self.configs, verifier=lambda access, phone: "ok")
+
+        result = workflow.handle(self.session.id, "have we connect whatsapp right now?")
+
+        self.assertTrue(result.handled)
+        self.assertIn("not connected", "\n".join(result.messages).lower())
+        self.assertFalse(workflow.active(self.session.id))
+
+    def test_trigger_with_active_connection_reports_status_not_tutorial(self) -> None:
+        self.configs.save("whatsapp", "active", "Allpath / +15551234567")
+        workflow = WhatsAppConnectionWorkflow(self.runs, self.secrets, self.configs, verifier=lambda access, phone: "ok")
+
+        result = workflow.handle(self.session.id, "connect whatsapp")
+
+        self.assertTrue(result.handled)
+        self.assertIn("Allpath / +15551234567", "\n".join(result.messages))
+        self.assertFalse(workflow.active(self.session.id))

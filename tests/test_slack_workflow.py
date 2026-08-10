@@ -121,6 +121,25 @@ class SlackConnectionWorkflowTestCase(unittest.TestCase):
         self.assertIn("type “continue”", result.messages[0])
         self.assertIn("1/7", workflow.input_hint(self.session.id))
 
+    def test_state_question_returns_status_instead_of_tutorial(self) -> None:
+        workflow = SlackConnectionWorkflow(self.runs, self.secrets, self.configs, verifier=lambda bot, app: "ok")
+
+        result = workflow.handle(self.session.id, "have we connect slack right now?")
+
+        self.assertTrue(result.handled)
+        self.assertIn("not connected", "\n".join(result.messages).lower())
+        self.assertFalse(workflow.active(self.session.id))
+
+    def test_trigger_with_active_connection_reports_status_not_tutorial(self) -> None:
+        self.configs.save("slack", "active", "Workspace / allpath")
+        workflow = SlackConnectionWorkflow(self.runs, self.secrets, self.configs, verifier=lambda bot, app: "ok")
+
+        result = workflow.handle(self.session.id, "connect slack")
+
+        self.assertTrue(result.handled)
+        self.assertIn("Workspace / allpath", "\n".join(result.messages))
+        self.assertFalse(workflow.active(self.session.id))
+
 
 if __name__ == "__main__":
     unittest.main()

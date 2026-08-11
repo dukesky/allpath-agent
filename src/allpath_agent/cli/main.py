@@ -640,6 +640,7 @@ def _chat(
                 sessions.set_title(active_session_id, user_message[:60])
             result = application.send(active_session_id, user_message)
         except KeyboardInterrupt:
+            directive_sink.take()
             _close_interrupted_turn(messages, active_session_id)
             output("")
             output("Task interrupted. You can continue in the same session.")
@@ -651,6 +652,7 @@ def _chat(
             ValueError,
             KeyError,
         ) as error:
+            directive_sink.take()
             _close_interrupted_turn(messages, active_session_id)
             error_output(f"Task failed: {error}")
             continue
@@ -676,6 +678,7 @@ def _chat(
                     chat_ui.assistant(message, "setup")
             else:
                 pending_trigger = _directive_trigger_message(directive)
+        continue
 
 
 def _run_connection_selectors(

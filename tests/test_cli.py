@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from allpath_agent.automations import AutomationService
 from allpath_agent.cli.main import (
     _build_application,
     _chat,
@@ -21,7 +22,10 @@ from allpath_agent.cli.main import (
 )
 from allpath_agent.config import ConfigError, load_config
 from allpath_agent.hooks import HookBus
+from allpath_agent.models import ProviderError
 from allpath_agent.storage import (
+    AutomationJobRepository,
+    AutomationRunRepository,
     CapabilityProgressRepository,
     Database,
     MemoryRepository,
@@ -31,7 +35,7 @@ from allpath_agent.storage import (
     ConnectorConfigRepository,
 )
 from allpath_agent.secrets import SecretStore
-from allpath_agent.workflows import ProviderConnectionWorkflow
+from allpath_agent.workflows import AutomationCreationWorkflow, ProviderConnectionWorkflow
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -612,6 +616,193 @@ class DirectiveDrainReentersLoopTestCase(unittest.TestCase):
         )
 
 
+class StaleDirectiveDiscardedOnFailedTurnTestCase(unittest.TestCase):
+    def test_directive_set_before_a_failed_send_does_not_fire_on_the_next_turn(self) -> None:
+        from allpath_agent.tools.assistant_directives import AssistantDirective
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            database = Database(home / "state.db")
+            database.initialize()
+            outputs: list[str] = []
+
+            class FakeApplication:
+                def __init__(self, sink) -> None:
+                    self.hooks = HookBus()
+                    self._sink = sink
+                    self.sent_messages: list[str] = []
+                    self._calls = 0
+
+                def start_session(self, session_id: str) -> None:
+                    return None
+
+                def capability_progress(self):
+                    return ()
+
+                def record_capability_success(self, capability_id: str) -> None:
+                    return None
+
+                def record_capability_tried(self, capability_id: str) -> None:
+                    return None
+
+                def dismiss_suggestion(self, session_id: str, capability_id: str | None = None) -> bool:
+                    return False
+
+                def send(self, session_id: str, message: str):
+                    self.sent_messages.append(message)
+                    self._calls += 1
+                    if self._calls == 1:
+                        # Simulate a directive tool running, then the turn
+                        # itself failing (e.g. the provider errored out
+                        # after the tool call).
+                        self._sink.set(AssistantDirective("channel_setup", channel="telegram"))
+                        raise ProviderError("simulated provider failure")
+                    return SimpleNamespace(
+                        agent=SimpleNamespace(
+                            content="ok",
+                            model_profile="fast",
+                            usage_reported=False,
+                            model_calls=1,
+                            total_tokens=0,
+                            estimated_cost_usd=0.0,
+                        ),
+                        suggestion=None,
+                    )
+
+            captured: dict[str, object] = {}
+
+            def fake_build_application(*args, **kwargs):
+                sink = kwargs["directive_sink"]
+                application = FakeApplication(sink)
+                captured["application"] = application
+                return application
+
+            calls = iter(("hello", "hi again", "/exit"))
+
+            def scripted_input(prompt: str) -> str:
+                return next(calls)
+
+            with patch("allpath_agent.cli.main._build_application", side_effect=fake_build_application):
+                result = _chat(
+                    home,
+                    database,
+                    True,
+                    None,
+                    scripted_input,
+                    outputs.append,
+                    outputs.append,
+                )
+
+        self.assertEqual(result, 0)
+        application = captured["application"]
+        # Both turns were sent to the application: the first failed after
+        # setting a directive, the second succeeded without setting one.
+        self.assertEqual(application.sent_messages, ["hello", "hi again"])
+        # The stale directive from the failed turn must not have fired on
+        # the following successful turn.
+        self.assertFalse(
+            any(
+                "Connect a reasoning model first, then connect a messaging channel." in line
+                for line in outputs
+            )
+        )
+
+
+class AutomationSetupDirectiveDrainTestCase(unittest.TestCase):
+    def test_automation_setup_directive_starts_workflow_at_destination_step(self) -> None:
+        from allpath_agent.tools.assistant_directives import AssistantDirective
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            database = Database(home / "state.db")
+            database.initialize()
+            outputs: list[str] = []
+            session = SessionRepository(database).create()
+
+            class FakeApplication:
+                def __init__(self, sink) -> None:
+                    self.hooks = HookBus()
+                    self._sink = sink
+                    self.sent_messages: list[str] = []
+
+                def start_session(self, session_id: str) -> None:
+                    return None
+
+                def capability_progress(self):
+                    return ()
+
+                def record_capability_success(self, capability_id: str) -> None:
+                    return None
+
+                def record_capability_tried(self, capability_id: str) -> None:
+                    return None
+
+                def dismiss_suggestion(self, session_id: str, capability_id: str | None = None) -> bool:
+                    return False
+
+                def send(self, session_id: str, message: str):
+                    self.sent_messages.append(message)
+                    self._sink.set(
+                        AssistantDirective(
+                            "automation_setup",
+                            prefill={
+                                "name": "Brief",
+                                "prompt": "Summarize",
+                                "schedule": "0 8 * * *",
+                                "timezone": "UTC",
+                            },
+                        )
+                    )
+                    return SimpleNamespace(
+                        agent=SimpleNamespace(
+                            content="Let's set that up.",
+                            model_profile="fast",
+                            usage_reported=False,
+                            model_calls=1,
+                            total_tokens=0,
+                            estimated_cost_usd=0.0,
+                        ),
+                        suggestion=None,
+                    )
+
+            def fake_build_application(*args, **kwargs):
+                sink = kwargs["directive_sink"]
+                return FakeApplication(sink)
+
+            calls = iter(("create an automation", "/exit"))
+
+            def scripted_input(prompt: str) -> str:
+                return next(calls)
+
+            with patch("allpath_agent.cli.main._build_application", side_effect=fake_build_application):
+                result = _chat(
+                    home,
+                    database,
+                    True,
+                    session.id,
+                    scripted_input,
+                    outputs.append,
+                    outputs.append,
+                )
+
+            automation_workflow = AutomationCreationWorkflow(
+                WorkflowRunRepository(database),
+                AutomationService(
+                    AutomationJobRepository(database),
+                    AutomationRunRepository(database),
+                    SessionRepository(database),
+                ),
+                lambda: (),
+            )
+            workflow_active = automation_workflow.active(session.id)
+
+        self.assertEqual(result, 0)
+        # All four prefill fields were valid, so the workflow should have
+        # skipped straight to the destination step.
+        self.assertTrue(workflow_active)
+        self.assertTrue(any("Where should results go?" in line for line in outputs))
+
+
 class GatewayStaysDirectiveFreeTestCase(unittest.TestCase):
     def test_application_without_directive_sink_has_no_channel_connect_tool(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -634,6 +825,32 @@ class GatewayStaysDirectiveFreeTestCase(unittest.TestCase):
         self.assertNotIn("channel_connect", tool_names)
         self.assertNotIn("create_automation", tool_names)
         self.assertNotIn("connect_model", tool_names)
+
+
+class ChatApplicationRegistersDirectiveToolsTestCase(unittest.TestCase):
+    def test_application_with_directive_sink_has_channel_connect_and_automation_tools(self) -> None:
+        from allpath_agent.tools.assistant_directives import DirectiveSink
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            database = Database(home / "state.db")
+            database.initialize()
+
+            application = _build_application(
+                home,
+                database,
+                True,
+                lambda prompt: "",
+                lambda message: None,
+                interactive_approvals=False,
+                directive_sink=DirectiveSink(),
+            )
+
+            registry = application._loop._tool_executor._registry
+            tool_names = {schema["function"]["name"] for schema in registry.schemas()}
+
+        self.assertIn("channel_connect", tool_names)
+        self.assertIn("create_automation", tool_names)
 
 
 if __name__ == "__main__":

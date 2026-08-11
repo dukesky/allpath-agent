@@ -14,15 +14,21 @@ from allpath_agent.storage import (
 )
 
 ALLPATH_COMMANDS = (
-    "Allpath built-in conversational flows (handled by deterministic code outside this model): "
-    "“connect a model” configures a model provider; “connect Telegram”, “connect Slack”, and "
-    "“connect WhatsApp” run guided messaging-channel setup; “create automation” (or /automations add) "
-    "schedules one-time or recurring jobs with optional delivery to a connected channel; "
-    "“setup browser” prepares the structured browser. "
-    "Slash commands: /help, /model, /models, /route, /sessions, /connectors, /automations, /skills, "
-    "/mcp, /browser, /capabilities, /dismiss. "
-    "When the user wants one of these capabilities, do not claim it is unavailable — reply with the exact "
-    "phrase or command to type."
+    "Allpath routing rules: "
+    "When the user asks ABOUT a messaging channel or its state, call channel_status — never guess "
+    "and never start setup for a question. "
+    "When the user asks to CONNECT a channel, call channel_connect right away; when they want a "
+    "scheduled or recurring task, call create_automation and pass any name, task, schedule, or "
+    "timezone you can extract from their request; when they want to add or replace a model "
+    "connection, call connect_model. After any of these calls the host runs the guided flow — "
+    "tell the user the questions come next and do not describe the steps yourself. "
+    "If those tools are not available in this session, direct the user to type the exact phrase: "
+    "“connect Telegram”, “connect Slack”, “connect WhatsApp”, “create automation” "
+    "(or /automations add), or “connect a model”. "
+    "Slash commands: /help, /model, /models, /route, /sessions, /connectors, /automations, "
+    "/skills, /mcp, /browser, /capabilities, /dismiss. "
+    "This list is not Allpath's complete capability set: never tell the user a capability "
+    "does not exist without first checking channel_status, /help, or the skills index."
 )
 
 

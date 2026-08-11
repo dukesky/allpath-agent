@@ -84,6 +84,17 @@ Acceptance criteria:
   user-assisted checkpoint;
 - the README quickstart describes the golden path in order.
 
+## Milestone 4: Model-driven intent routing (shipped with this change)
+
+Tool-capable models now route intent themselves: `channel_status` answers
+channel state questions read-only; `channel_connect`, `create_automation`
+(with validated prefill extracted from the request), and `connect_model` hand
+off to the existing deterministic guided flows via side-effect-free
+directives. Exact trigger phrases remain a deterministic fast path because
+external-CLI providers (Claude Code and Codex account connections) do not
+receive tool schemas. Directive tools are registered only in interactive chat
+sessions, never in the gateway or unattended runs.
+
 ## Explicitly parked
 
 Not in this phase, recorded so drift is a decision rather than an accident:

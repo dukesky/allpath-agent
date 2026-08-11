@@ -102,10 +102,11 @@ class AgentLoopTestCase(unittest.TestCase):
     def test_runtime_system_prompt_lists_allpath_flows(self) -> None:
         prompt = _runtime_system_prompt("base", ModelProfile("fast", "m", quality=1, cost=1))
 
+        self.assertIn("channel_status", prompt)
+        self.assertIn("channel_connect", prompt)
+        self.assertIn("create_automation", prompt)
         self.assertIn("connect Telegram", prompt)
-        self.assertIn("create automation", prompt)
-        self.assertIn("/automations", prompt)
-        self.assertIn("do not claim it is unavailable", prompt)
+        self.assertIn("does not exist", prompt)
 
     def test_completes_simple_conversation_and_persists_messages(self) -> None:
         provider = FakeProvider(

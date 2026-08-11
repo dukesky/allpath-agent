@@ -78,6 +78,7 @@ These surfaces share curriculum state, but they do not inject changing curriculu
 - Add completion notifications and destination-aware delivery.
 - Generate reply suggestions only when useful and keep them separate from the user's authored message.
 - Add daily briefs and recurring personal workflows as curriculum capabilities.
+- Route intent through model tools (`channel_status`, `channel_connect`, `create_automation`, `connect_model`) with deterministic trigger phrases retained as the fast path for providers without tool support. **Implemented.**
 
 ### Stage 6: Browser and computer tasks
 

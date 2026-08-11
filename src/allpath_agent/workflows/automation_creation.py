@@ -51,6 +51,52 @@ class AutomationCreationWorkflow:
         language = active["state"].get("language", "en")
         return _HINTS[active["current_step"]][language]
 
+    def start(
+        self,
+        session_id: str,
+        language: str = "en",
+        prefill: dict[str, str] | None = None,
+    ) -> ConnectionFlowResult:
+        active = self._runs.get_active(session_id, WORKFLOW_ID)
+        if active is not None:
+            return ConnectionFlowResult(True, (self._prompt(active["current_step"], dict(active["state"])),))
+        state: dict[str, Any] = {"language": language}
+        for fieldname, value in (prefill or {}).items():
+            cleaned = str(value).strip()
+            if not cleaned:
+                continue
+            if fieldname == "name" and len(cleaned) <= 60:
+                state["name"] = cleaned
+            elif fieldname == "prompt":
+                state["prompt"] = cleaned
+            elif fieldname == "schedule":
+                kind = _schedule_kind(cleaned)
+                if kind is not None:
+                    state["schedule_kind"] = kind
+                    state["schedule_expression"] = cleaned
+            elif fieldname == "timezone":
+                zone = "UTC" if cleaned.lower() in {"default", "utc", "默认"} else cleaned
+                try:
+                    ZoneInfo(zone)
+                except ZoneInfoNotFoundError:
+                    continue
+                state["timezone"] = zone
+        step = next(
+            (
+                candidate
+                for candidate, key in (
+                    ("name", "name"),
+                    ("prompt", "prompt"),
+                    ("schedule", "schedule_expression"),
+                    ("timezone", "timezone"),
+                )
+                if key not in state
+            ),
+            "destination",
+        )
+        self._runs.create(WORKFLOW_ID, session_id, step, state)
+        return ConnectionFlowResult(True, (self._prompt(step, state),))
+
     def handle(self, session_id: str, message: str) -> ConnectionFlowResult:
         cleaned = message.strip()
         active = self._runs.get_active(session_id, WORKFLOW_ID)
@@ -58,8 +104,7 @@ class AutomationCreationWorkflow:
             if not _is_trigger(cleaned):
                 return ConnectionFlowResult(False)
             language = "zh" if _has_chinese(cleaned) else "en"
-            self._runs.create(WORKFLOW_ID, session_id, "name", {"language": language})
-            return ConnectionFlowResult(True, (self._prompt("name", {"language": language}),))
+            return self.start(session_id, language)
         state = dict(active["state"])
         language = state.get("language", "en")
         command = cleaned.lower()

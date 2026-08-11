@@ -166,3 +166,51 @@ class AutomationCreationWorkflowTestCase(unittest.TestCase):
         self.assertTrue(result.handled)
         self.assertTrue(self.workflow.active("session-1"))
         self.assertEqual(self.jobs.list_all(), [])
+
+    def test_start_with_full_prefill_begins_at_destination(self) -> None:
+        result = self.workflow.start(
+            "session-1",
+            "en",
+            {
+                "name": "Morning brief",
+                "prompt": "Summarize the news",
+                "schedule": "0 8 * * *",
+                "timezone": "UTC",
+            },
+        )
+
+        self.assertTrue(result.handled)
+        self.assertIn("none", "\n".join(result.messages).lower())
+        finished = self._drive("none", "confirm")
+        self.assertTrue(finished[-1].completed)
+        job = self.jobs.list_all()[0]
+        self.assertEqual(job["name"], "Morning brief")
+        self.assertEqual(job["schedule_expression"], "0 8 * * *")
+
+    def test_start_drops_invalid_prefill_and_asks_for_it(self) -> None:
+        result = self.workflow.start(
+            "session-1",
+            "en",
+            {"name": "Brief", "prompt": "Summarize", "schedule": "tomorrow-ish", "timezone": "UTC"},
+        )
+
+        self.assertTrue(result.handled)
+        self.assertIn("cron", "\n".join(result.messages).lower())
+
+    def test_start_without_prefill_matches_trigger_behavior(self) -> None:
+        via_start = self.workflow.start("session-1", "en")
+        self.workflow.handle("session-1", "cancel")
+        via_trigger = self.workflow.handle("session-1", "create automation")
+
+        self.assertEqual(via_start.messages, via_trigger.messages)
+
+    def test_start_while_active_rerenders_instead_of_restarting(self) -> None:
+        self.workflow.start("session-1", "en", {"name": "Brief"})
+
+        again = self.workflow.start("session-1", "en", {"name": "Other"})
+
+        self.assertTrue(again.handled)
+        state_run = self.workflow.handle("session-1", "Summarize")
+        self.assertTrue(state_run.handled)
+        jobs_after = self.jobs.list_all()
+        self.assertEqual(jobs_after, [])

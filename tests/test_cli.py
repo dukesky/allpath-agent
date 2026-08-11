@@ -12,8 +12,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from allpath_agent.cli.main import (
+    _build_application,
     _chat,
     _completed_daily_briefing,
+    _directive_trigger_message,
     _run_connection_selectors,
     _run_gateway,
 )
@@ -498,6 +500,140 @@ class CompletedDailyBriefingTestCase(unittest.TestCase):
             {"created_at": "2026-07-20T00:00:00+00:00", "schedule_kind": "cron", "destination_connector_id": "telegram"},
         ]
         self.assertTrue(_completed_daily_briefing(jobs))
+
+
+class DirectiveTriggerMessageTestCase(unittest.TestCase):
+    def test_channel_setup_maps_to_connect_phrase(self) -> None:
+        from allpath_agent.tools.assistant_directives import AssistantDirective
+
+        self.assertEqual(
+            _directive_trigger_message(AssistantDirective("channel_setup", channel="telegram")),
+            "connect telegram",
+        )
+        self.assertEqual(
+            _directive_trigger_message(
+                AssistantDirective("channel_setup", channel="slack", reconnect=True)
+            ),
+            "reconnect slack",
+        )
+        self.assertEqual(
+            _directive_trigger_message(AssistantDirective("model_setup")),
+            "connect model",
+        )
+        self.assertIsNone(
+            _directive_trigger_message(AssistantDirective("automation_setup")),
+        )
+
+
+class DirectiveDrainReentersLoopTestCase(unittest.TestCase):
+    def test_channel_setup_directive_reenters_loop_with_synthetic_trigger(self) -> None:
+        from allpath_agent.tools.assistant_directives import AssistantDirective
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            database = Database(home / "state.db")
+            database.initialize()
+            outputs: list[str] = []
+
+            class FakeApplication:
+                def __init__(self, sink) -> None:
+                    self.hooks = HookBus()
+                    self._sink = sink
+                    self.sent_messages: list[str] = []
+
+                def start_session(self, session_id: str) -> None:
+                    return None
+
+                def capability_progress(self):
+                    return ()
+
+                def record_capability_success(self, capability_id: str) -> None:
+                    return None
+
+                def record_capability_tried(self, capability_id: str) -> None:
+                    return None
+
+                def dismiss_suggestion(self, session_id: str, capability_id: str | None = None) -> bool:
+                    return False
+
+                def send(self, session_id: str, message: str):
+                    self.sent_messages.append(message)
+                    # Simulate the model calling the channel_connect tool, which
+                    # leaves a directive for the CLI to drain after this turn.
+                    self._sink.set(AssistantDirective("channel_setup", channel="telegram"))
+                    return SimpleNamespace(
+                        agent=SimpleNamespace(
+                            content="Let's get Telegram connected.",
+                            model_profile="fast",
+                            usage_reported=False,
+                            model_calls=1,
+                            total_tokens=0,
+                            estimated_cost_usd=0.0,
+                        ),
+                        suggestion=None,
+                    )
+
+            captured: dict[str, object] = {}
+
+            def fake_build_application(*args, **kwargs):
+                sink = kwargs["directive_sink"]
+                application = FakeApplication(sink)
+                captured["application"] = application
+                return application
+
+            calls = iter(("hello", "/exit"))
+
+            def scripted_input(prompt: str) -> str:
+                return next(calls)
+
+            with patch("allpath_agent.cli.main._build_application", side_effect=fake_build_application):
+                result = _chat(
+                    home,
+                    database,
+                    True,
+                    None,
+                    scripted_input,
+                    outputs.append,
+                    outputs.append,
+                )
+
+        self.assertEqual(result, 0)
+        application = captured["application"]
+        # The model turn ran once for "hello"; the drained directive produced a
+        # synthetic "connect telegram" message that re-entered the loop and hit
+        # the existing trigger-detection gate (no live model configured yet),
+        # without consuming another real input from the user.
+        self.assertEqual(application.sent_messages, ["hello"])
+        self.assertTrue(
+            any(
+                "Connect a reasoning model first, then connect a messaging channel." in line
+                for line in outputs
+            )
+        )
+
+
+class GatewayStaysDirectiveFreeTestCase(unittest.TestCase):
+    def test_application_without_directive_sink_has_no_channel_connect_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            database = Database(home / "state.db")
+            database.initialize()
+
+            application = _build_application(
+                home,
+                database,
+                True,
+                lambda prompt: "",
+                lambda message: None,
+                interactive_approvals=False,
+            )
+
+            registry = application._loop._tool_executor._registry
+            tool_names = {schema["function"]["name"] for schema in registry.schemas()}
+
+        self.assertNotIn("channel_connect", tool_names)
+        self.assertNotIn("create_automation", tool_names)
+        self.assertNotIn("connect_model", tool_names)
 
 
 if __name__ == "__main__":

@@ -49,6 +49,11 @@ from allpath_agent.storage import (
     ToolExecutionRepository,
     WorkflowRunRepository,
 )
+from allpath_agent.tools.assistant_directives import (
+    AssistantDirective,
+    DirectiveSink,
+    register_assistant_tools,
+)
 from allpath_agent.tools import (
     MCP_AVAILABLE,
     PLAYWRIGHT_AVAILABLE,
@@ -184,6 +189,15 @@ def _active_connector_ids(database: Database) -> tuple[str, ...]:
     )
 
 
+def _directive_trigger_message(directive: AssistantDirective) -> str | None:
+    if directive.kind == "channel_setup":
+        verb = "reconnect" if directive.reconnect else "connect"
+        return f"{verb} {directive.channel}"
+    if directive.kind == "model_setup":
+        return "connect model"
+    return None
+
+
 def _chat(
     home: Path,
     database: Database,
@@ -207,6 +221,7 @@ def _chat(
     chat_ui = TerminalChatUI(input_fn, output)
     browser_profile = home / "browser-profile"
     browser_service = create_browser_service(browser_profile)
+    directive_sink = DirectiveSink()
     application = _build_application(
         home,
         database,
@@ -214,6 +229,7 @@ def _chat(
         input_fn,
         output,
         browser_service=browser_service,
+        directive_sink=directive_sink,
     )
     application.hooks.subscribe("*", chat_ui.handle_event)
     connection_workflow = ProviderConnectionWorkflow(
@@ -267,36 +283,41 @@ def _chat(
         output(line)
 
     active_session_id = session.id
+    pending_trigger: str | None = None
     while True:
-        try:
-            input_hint = connection_workflow.input_hint(active_session_id)
-            if input_hint is None:
-                input_hint = slack_workflow.input_hint(active_session_id)
-            if input_hint is None:
-                input_hint = whatsapp_workflow.input_hint(active_session_id)
-            if input_hint is None:
-                input_hint = telegram_workflow.input_hint(active_session_id)
-            if input_hint is None:
-                input_hint = automation_workflow.input_hint(active_session_id)
-            if input_hint is None and live_mode:
-                input_hint = next_capability_hint(
-                    application.capability_progress(),
-                    configured_connectors=_active_connector_ids(database),
-                )
-            if input_hint is None and not live_mode:
-                input_hint = "Try: 连接模型 · connect Telegram · what can you do"
-            user_message = chat_ui.read_message(input_hint)
-        except EOFError:
-            output("")
-            output("Goodbye.")
-            return 0
-        except KeyboardInterrupt:
-            output("")
-            output("Interrupted. Session state is saved.")
-            return 130
-        except UnicodeDecodeError:
-            error_output("Input contained an incomplete character. Please type it again.")
-            continue
+        if pending_trigger is not None:
+            user_message = pending_trigger
+            pending_trigger = None
+        else:
+            try:
+                input_hint = connection_workflow.input_hint(active_session_id)
+                if input_hint is None:
+                    input_hint = slack_workflow.input_hint(active_session_id)
+                if input_hint is None:
+                    input_hint = whatsapp_workflow.input_hint(active_session_id)
+                if input_hint is None:
+                    input_hint = telegram_workflow.input_hint(active_session_id)
+                if input_hint is None:
+                    input_hint = automation_workflow.input_hint(active_session_id)
+                if input_hint is None and live_mode:
+                    input_hint = next_capability_hint(
+                        application.capability_progress(),
+                        configured_connectors=_active_connector_ids(database),
+                    )
+                if input_hint is None and not live_mode:
+                    input_hint = "Try: 连接模型 · connect Telegram · what can you do"
+                user_message = chat_ui.read_message(input_hint)
+            except EOFError:
+                output("")
+                output("Goodbye.")
+                return 0
+            except KeyboardInterrupt:
+                output("")
+                output("Interrupted. Session state is saved.")
+                return 130
+            except UnicodeDecodeError:
+                error_output("Input contained an incomplete character. Please type it again.")
+                continue
 
         if not user_message and not connection_workflow.active(active_session_id):
             continue
@@ -409,6 +430,7 @@ def _chat(
                         input_fn,
                         output,
                         browser_service=browser_service,
+                        directive_sink=directive_sink,
                     )
                     application.hooks.subscribe("*", chat_ui.handle_event)
                     application.start_session(active_session_id)
@@ -445,6 +467,7 @@ def _chat(
                             input_fn,
                             output,
                             browser_service=browser_service,
+                            directive_sink=directive_sink,
                         )
                         application.hooks.subscribe("*", chat_ui.handle_event)
                         application.start_session(active_session_id)
@@ -458,6 +481,7 @@ def _chat(
                             input_fn,
                             output,
                             browser_service=browser_service,
+                            directive_sink=directive_sink,
                         )
                         application.hooks.subscribe("*", chat_ui.handle_event)
                         application.start_session(active_session_id)
@@ -604,6 +628,7 @@ def _chat(
                     input_fn,
                     output,
                     browser_service=browser_service,
+                    directive_sink=directive_sink,
                 )
                 application.hooks.subscribe("*", chat_ui.handle_event)
                 application.start_session(active_session_id)
@@ -638,6 +663,19 @@ def _chat(
             )
         if result.suggestion:
             chat_ui.suggestion(result.suggestion.capability_id, result.suggestion.message)
+
+        directive = directive_sink.take()
+        if directive is not None:
+            if directive.kind == "automation_setup":
+                language = "zh" if any("一" <= char <= "鿿" for char in user_message) else "en"
+                application.record_capability_tried("scheduled_automations")
+                automation_result = automation_workflow.start(
+                    active_session_id, language, directive.prefill
+                )
+                for message in automation_result.messages:
+                    chat_ui.assistant(message, "setup")
+            else:
+                pending_trigger = _directive_trigger_message(directive)
 
 
 def _run_connection_selectors(
@@ -702,6 +740,7 @@ def _build_application(
     output: Output,
     interactive_approvals: bool = True,
     browser_service: BrowserService | None = None,
+    directive_sink: DirectiveSink | None = None,
 ) -> AgentApplication:
     if demo:
         provider = ProviderPool.single(DemoProvider())
@@ -746,6 +785,8 @@ def _build_application(
         Path.cwd(),
         environment,
     )
+    if directive_sink is not None:
+        register_assistant_tools(registry, ConnectorConfigRepository(database), directive_sink)
     runtime = ToolRuntime(
         registry,
         approvals,

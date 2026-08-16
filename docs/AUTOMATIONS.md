@@ -60,6 +60,12 @@ prompts, review the echoed summary, and type “confirm” before anything is
 saved. Destinations are chosen from conversations Allpath has already seen on
 a connected channel; message the bot once to register one.
 
+Creation also works from inside a connected messaging channel: send
+`/automations add` (or say “create automation”) to the bot. The same guided
+flow runs there, and the delivery destination is preselected as the
+conversation you are typing in, so results come back to the same chat.
+`/automations` lists jobs from the channel as well.
+
 ## SQLite model
 
 ### `automation_jobs`

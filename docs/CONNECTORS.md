@@ -130,6 +130,15 @@ workflow active until the user configures `/webhooks/whatsapp`, subscribes to
 reply. Access tokens, App Secrets, and verify tokens use hidden input and never
 enter workflow state.
 
+## Channel commands
+
+Inside a connected channel, Allpath handles these before the model sees them:
+`/automations` (list) and `/automations add` (start guided creation, results
+delivered back to this conversation). While a creation flow is active, every
+message in that conversation answers the flow until it completes or you send
+“cancel”. Model connections and channel setup remain terminal-only, and
+side-effecting tools stay disabled in channels.
+
 ## Next implementation
 
 1. Add bounded polling retries and privacy-safe connector lifecycle logs.

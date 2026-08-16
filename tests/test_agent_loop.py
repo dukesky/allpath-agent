@@ -108,6 +108,17 @@ class AgentLoopTestCase(unittest.TestCase):
         self.assertIn("connect Telegram", prompt)
         self.assertIn("does not exist", prompt)
 
+    def test_gateway_surface_prompt_advertises_only_channel_capabilities(self) -> None:
+        prompt = _runtime_system_prompt(
+            "base", ModelProfile("fast", "m", quality=1, cost=1), surface="gateway"
+        )
+
+        self.assertIn("/automations add", prompt)
+        self.assertIn("messaging channel", prompt)
+        self.assertNotIn("channel_connect", prompt)
+        self.assertNotIn("/models", prompt)
+        self.assertIn("Allpath Agent", prompt)
+
     def test_completes_simple_conversation_and_persists_messages(self) -> None:
         provider = FakeProvider(
             [

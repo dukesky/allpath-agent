@@ -31,6 +31,18 @@ ALLPATH_COMMANDS = (
     "does not exist without first checking channel_status, /help, or the skills index."
 )
 
+GATEWAY_SURFACE_NOTE = (
+    "You are Allpath Agent replying inside a messaging channel (Telegram, Slack, or WhatsApp). "
+    "Introduce yourself as Allpath Agent, a personal assistant; do not describe yourself as a "
+    "coding assistant. In this channel the user can send “/automations” to list scheduled "
+    "automations and “/automations add” (or say “create automation”) to start a guided flow "
+    "that schedules a recurring or one-time task delivered back to this conversation; the host "
+    "handles that flow — tell the user to send that command rather than describing steps. "
+    "Model connections and channel setup are managed from the Allpath terminal, not from this "
+    "channel. Side-effecting tools are unavailable here; read-only lookups still work. "
+    "Never claim a capability does not exist without checking /help or the terminal."
+)
+
 
 @dataclass(frozen=True)
 class ApplicationResult:
@@ -52,6 +64,7 @@ class AgentApplication:
         system_prompt: str,
         live_provider: bool,
         hooks: HookBus | None = None,
+        surface: str = "terminal",
     ):
         self._loop = loop
         self._router = router
@@ -62,6 +75,7 @@ class AgentApplication:
         self._system_prompt = system_prompt
         self._live_provider = live_provider
         self.hooks = hooks or HookBus()
+        self._surface = surface
 
     def start_session(self, session_id: str) -> None:
         self._curriculum.start_session(session_id)
@@ -104,7 +118,7 @@ class AgentApplication:
             session_id,
             task_id,
             message,
-            _runtime_system_prompt(self._system_prompt, decision.profile),
+            _runtime_system_prompt(self._system_prompt, decision.profile, self._surface),
             decision.profile,
         )
         suggestion = None
@@ -216,7 +230,11 @@ def analyze_task(message: str) -> TaskSignals:
     )
 
 
-def _runtime_system_prompt(system_prompt: str, profile: ModelProfile) -> str:
+def _runtime_system_prompt(
+    system_prompt: str,
+    profile: ModelProfile,
+    surface: str = "terminal",
+) -> str:
     tool_access = (
         "Allpath tool schemas may be available for this task."
         if profile.supports_tools
@@ -227,13 +245,14 @@ def _runtime_system_prompt(system_prompt: str, profile: ModelProfile) -> str:
         if profile.provider == "openai-codex"
         else ""
     )
+    surface_note = GATEWAY_SURFACE_NOTE if surface == "gateway" else ALLPATH_COMMANDS
     return (
         f"{system_prompt}\n\n"
         "Runtime identity (authoritative): "
         f"role={profile.name}, provider={profile.provider}, model={profile.model}. "
         f"{tool_access}{external_boundary} "
         "When asked which model or permissions are active, report these exact values and do not guess.\n\n"
-        f"{ALLPATH_COMMANDS}"
+        f"{surface_note}"
     )
 
 

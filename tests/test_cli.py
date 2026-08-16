@@ -826,6 +826,33 @@ class GatewayStaysDirectiveFreeTestCase(unittest.TestCase):
         self.assertNotIn("create_automation", tool_names)
         self.assertNotIn("connect_model", tool_names)
 
+    def test_gateway_surface_threads_into_application(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            database = Database(home / "state.db")
+            database.initialize()
+
+            gateway_application = _build_application(
+                home,
+                database,
+                True,
+                lambda prompt: "",
+                lambda message: None,
+                interactive_approvals=False,
+                surface="gateway",
+            )
+            terminal_application = _build_application(
+                home,
+                database,
+                True,
+                lambda prompt: "",
+                lambda message: None,
+                interactive_approvals=False,
+            )
+
+        self.assertEqual(gateway_application._surface, "gateway")
+        self.assertEqual(terminal_application._surface, "terminal")
+
 
 class ChatApplicationRegistersDirectiveToolsTestCase(unittest.TestCase):
     def test_application_with_directive_sink_has_channel_connect_and_automation_tools(self) -> None:

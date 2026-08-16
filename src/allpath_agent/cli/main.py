@@ -744,6 +744,7 @@ def _build_application(
     interactive_approvals: bool = True,
     browser_service: BrowserService | None = None,
     directive_sink: DirectiveSink | None = None,
+    surface: str = "terminal",
 ) -> AgentApplication:
     if demo:
         provider = ProviderPool.single(DemoProvider())
@@ -828,6 +829,7 @@ def _build_application(
         system_prompt,
         live_provider=not demo,
         hooks=hooks,
+        surface=surface,
     )
 
 
@@ -1105,6 +1107,7 @@ def _run_gateway(
         lambda prompt: "",
         output,
         interactive_approvals=False,
+        surface="gateway",
     )
     registry = ConnectorRegistry(tuple(connectors))
     automation_workflow = AutomationCreationWorkflow(

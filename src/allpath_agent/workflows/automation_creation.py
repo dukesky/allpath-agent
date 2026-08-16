@@ -44,6 +44,12 @@ class AutomationCreationWorkflow:
     def active(self, session_id: str) -> bool:
         return self._runs.get_active(session_id, WORKFLOW_ID) is not None
 
+    def is_trigger(self, message: str) -> bool:
+        return _is_trigger(message)
+
+    def list_jobs(self) -> list[dict[str, Any]]:
+        return self._service.jobs.list_all()
+
     def input_hint(self, session_id: str) -> str | None:
         active = self._runs.get_active(session_id, WORKFLOW_ID)
         if active is None or active["current_step"] not in _HINTS:

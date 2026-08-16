@@ -1107,11 +1107,21 @@ def _run_gateway(
         interactive_approvals=False,
     )
     registry = ConnectorRegistry(tuple(connectors))
+    automation_workflow = AutomationCreationWorkflow(
+        WorkflowRunRepository(database),
+        AutomationService(
+            AutomationJobRepository(database),
+            AutomationRunRepository(database),
+            SessionRepository(database),
+        ),
+        ConnectorSessionRepository(database).list_all,
+    )
     runtime = ConnectorRuntime(
         application,
         registry,
         SessionRepository(database),
         ConnectorSessionRepository(database),
+        automation_workflow=automation_workflow,
     )
     automation_service = AutomationService(
         AutomationJobRepository(database),

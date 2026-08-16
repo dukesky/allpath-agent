@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from allpath_agent.application import AgentApplication
 from allpath_agent.hooks import HookBus
 from allpath_agent.storage import ConnectorSessionRepository, SessionRepository
 
 from .contracts import Connector, InboundMessage, OutboundMessage
+
+if TYPE_CHECKING:
+    from allpath_agent.workflows.automation_creation import AutomationCreationWorkflow
 
 
 class ConnectorRegistry:
@@ -36,12 +41,14 @@ class ConnectorRuntime:
         sessions: SessionRepository,
         bindings: ConnectorSessionRepository,
         hooks: HookBus | None = None,
+        automation_workflow: "AutomationCreationWorkflow | None" = None,
     ):
         self._application = application
         self._registry = registry
         self._sessions = sessions
         self._bindings = bindings
         self._hooks = hooks or getattr(application, "hooks", HookBus())
+        self._automation_workflow = automation_workflow
 
     def poll_once(self, connector_id: str) -> int:
         connector = self._registry.get(connector_id)
@@ -82,6 +89,25 @@ class ConnectorRuntime:
                 event.conversation_id,
                 session_id,
             )
+        handled_reply = self._handle_channel_command(event, session_id)
+        if handled_reply is not None:
+            self._registry.get(event.connector_id).send(
+                OutboundMessage(
+                    conversation_id=event.conversation_id,
+                    text=handled_reply,
+                    reply_to_message_id=event.message_id,
+                    metadata=event.metadata,
+                )
+            )
+            self._hooks.emit(
+                "connector_reply_sent",
+                connector_id=event.connector_id,
+                conversation_id=event.conversation_id,
+                source_message_id=event.message_id,
+                session_id=session_id,
+                task_id=None,
+            )
+            return session_id
         self._application.start_session(session_id)
         result = self._application.send(session_id, event.text)
         self._registry.get(event.connector_id).send(
@@ -101,3 +127,49 @@ class ConnectorRuntime:
             task_id=result.task_id,
         )
         return session_id
+
+    def _handle_channel_command(self, event: InboundMessage, session_id: str) -> str | None:
+        workflow = self._automation_workflow
+        if workflow is None:
+            return None
+        text = event.text.strip()
+        lowered = text.lower()
+        if lowered == "/automations":
+            return self._automation_list_text()
+        if lowered == "/automations add":
+            result = workflow.start(
+                session_id,
+                _language_of(text),
+                None,
+                default_destination=(event.connector_id, event.conversation_id),
+            )
+            return "\n\n".join(result.messages)
+        if workflow.active(session_id):
+            result = workflow.handle(session_id, text)
+            return "\n\n".join(result.messages) if result.handled else None
+        if workflow.is_trigger(text):
+            result = workflow.start(
+                session_id,
+                _language_of(text),
+                None,
+                default_destination=(event.connector_id, event.conversation_id),
+            )
+            return "\n\n".join(result.messages)
+        return None
+
+    def _automation_list_text(self) -> str:
+        jobs = self._automation_workflow.list_jobs()
+        if not jobs:
+            return "No automations yet. Send “/automations add” to create one."
+        lines = ["Automations:"]
+        for job in jobs:
+            state = "on" if job["enabled"] else "off"
+            lines.append(
+                f"• {job['name']} — {job['schedule_kind']} {job['schedule_expression']} "
+                f"({job['timezone']}) · {state} · next {job['next_run_at'] or '—'}"
+            )
+        return "\n".join(lines)
+
+
+def _language_of(text: str) -> str:
+    return "zh" if any("一" <= character <= "鿿" for character in text) else "en"

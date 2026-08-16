@@ -16,11 +16,16 @@ from allpath_agent.connectors import (
     OutboundMessage,
     TelegramConnector,
 )
+from allpath_agent.automations import AutomationService
 from allpath_agent.storage import (
+    AutomationJobRepository,
+    AutomationRunRepository,
     ConnectorSessionRepository,
     Database,
     SessionRepository,
+    WorkflowRunRepository,
 )
+from allpath_agent.workflows.automation_creation import AutomationCreationWorkflow
 
 
 class FakeApplication:
@@ -96,6 +101,89 @@ class ConnectorRuntimeTestCase(unittest.TestCase):
         registry = ConnectorRegistry((FakeConnector(),))
         with self.assertRaisesRegex(ValueError, "already registered"):
             registry.register(FakeConnector())
+
+
+class ConnectorAutomationCreationTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.database = Database(Path(self.temporary_directory.name) / "state.db")
+        self.database.initialize()
+        self.sessions = SessionRepository(self.database)
+        self.bindings = ConnectorSessionRepository(self.database)
+        self.jobs = AutomationJobRepository(self.database)
+        self.workflow = AutomationCreationWorkflow(
+            WorkflowRunRepository(self.database),
+            AutomationService(self.jobs, AutomationRunRepository(self.database), self.sessions),
+            self.bindings.list_all,
+        )
+
+    def tearDown(self) -> None:
+        self.temporary_directory.cleanup()
+
+    def _runtime(self, connector, application):
+        return ConnectorRuntime(
+            application,
+            ConnectorRegistry((connector,)),
+            self.sessions,
+            self.bindings,
+            automation_workflow=self.workflow,
+        )
+
+    def _messages(self, *texts):
+        return tuple(
+            InboundMessage("fake", "chat-1", "user-1", str(index), text, "now")
+            for index, text in enumerate(texts, start=10)
+        )
+
+    def test_slash_add_flow_creates_job_targeting_this_conversation(self) -> None:
+        connector = FakeConnector(
+            self._messages(
+                "/automations add",
+                "Morning brief",
+                "Summarize the news",
+                "0 8 * * *",
+                "UTC",
+                "confirm",
+            )
+        )
+        application = FakeApplication()
+
+        self._runtime(connector, application).poll_once("fake")
+
+        self.assertEqual(application.messages, [])
+        jobs = self.jobs.list_all()
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0]["destination_connector_id"], "fake")
+        self.assertEqual(jobs[0]["destination_conversation_id"], "chat-1")
+        self.assertIn("this conversation", " ".join(m.text for m in connector.sent))
+        self.assertTrue(connector.sent[-1].text.lower().startswith("automation"))
+
+    def test_trigger_phrase_starts_flow_and_model_is_bypassed_until_done(self) -> None:
+        connector = FakeConnector(self._messages("create automation", "cancel", "hello again"))
+        application = FakeApplication()
+
+        self._runtime(connector, application).poll_once("fake")
+
+        self.assertEqual([m[1] for m in application.messages], ["hello again"])
+        self.assertIn("cancel", connector.sent[1].text.lower())
+
+    def test_slash_list_replies_without_model(self) -> None:
+        connector = FakeConnector(self._messages("/automations"))
+        application = FakeApplication()
+
+        self._runtime(connector, application).poll_once("fake")
+
+        self.assertEqual(application.messages, [])
+        self.assertEqual(len(connector.sent), 1)
+
+    def test_runtime_without_workflow_keeps_legacy_behavior(self) -> None:
+        connector = FakeConnector(self._messages("/automations add"))
+        application = FakeApplication()
+        ConnectorRuntime(
+            application, ConnectorRegistry((connector,)), self.sessions, self.bindings
+        ).poll_once("fake")
+
+        self.assertEqual([m[1] for m in application.messages], ["/automations add"])
 
 
 class TelegramConnectorTestCase(unittest.TestCase):

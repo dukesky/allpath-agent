@@ -136,8 +136,9 @@ Inside a connected channel, Allpath handles these before the model sees them:
 `/automations` (list) and `/automations add` (start guided creation, results
 delivered back to this conversation). While a creation flow is active, every
 message in that conversation answers the flow until it completes or you send
-“cancel”. Model connections and channel setup remain terminal-only, and
-side-effecting tools stay disabled in channels.
+“cancel”. In Slack, slash-prefixed text is captured by Slack itself, so say
+“create automation” instead. Model connections and channel setup remain
+terminal-only, and side-effecting tools stay disabled in channels.
 
 ## Next implementation
 

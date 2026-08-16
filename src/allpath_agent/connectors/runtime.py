@@ -10,6 +10,15 @@ from .contracts import Connector, InboundMessage, OutboundMessage
 
 if TYPE_CHECKING:
     from allpath_agent.workflows.automation_creation import AutomationCreationWorkflow
+    from allpath_agent.workflows.provider_connection import ConnectionFlowResult
+
+
+_HELP_TEXT = (
+    "Commands: `/automations` lists scheduled automations. `/automations add` "
+    "starts a guided creation flow — results come back to this conversation. "
+    "Saying “create automation” does the same thing. Model connections "
+    "and channel setup are managed from the Allpath terminal."
+)
 
 
 class ConnectorRegistry:
@@ -89,8 +98,10 @@ class ConnectorRuntime:
                 event.conversation_id,
                 session_id,
             )
-        handled_reply = self._handle_channel_command(event, session_id)
+        handled_reply, workflow_result = self._handle_channel_command(event, session_id)
         if handled_reply is not None:
+            if workflow_result is not None:
+                self._record_workflow_curriculum(workflow_result)
             self._registry.get(event.connector_id).send(
                 OutboundMessage(
                     conversation_id=event.conversation_id,
@@ -128,14 +139,18 @@ class ConnectorRuntime:
         )
         return session_id
 
-    def _handle_channel_command(self, event: InboundMessage, session_id: str) -> str | None:
+    def _handle_channel_command(
+        self, event: InboundMessage, session_id: str
+    ) -> tuple[str | None, "ConnectionFlowResult | None"]:
+        text = event.text.strip()
+        lowered = _normalize_command(text.lower())
+        if lowered == "/help":
+            return _HELP_TEXT, None
         workflow = self._automation_workflow
         if workflow is None:
-            return None
-        text = event.text.strip()
-        lowered = text.lower()
+            return None, None
         if lowered == "/automations":
-            return self._automation_list_text()
+            return self._automation_list_text(), None
         if lowered == "/automations add":
             result = workflow.start(
                 session_id,
@@ -143,10 +158,10 @@ class ConnectorRuntime:
                 None,
                 default_destination=(event.connector_id, event.conversation_id),
             )
-            return "\n\n".join(result.messages)
+            return "\n\n".join(result.messages), result
         if workflow.active(session_id):
             result = workflow.handle(session_id, text)
-            return "\n\n".join(result.messages) if result.handled else None
+            return ("\n\n".join(result.messages), result) if result.handled else (None, None)
         if workflow.is_trigger(text):
             result = workflow.start(
                 session_id,
@@ -154,8 +169,17 @@ class ConnectorRuntime:
                 None,
                 default_destination=(event.connector_id, event.conversation_id),
             )
-            return "\n\n".join(result.messages)
-        return None
+            return "\n\n".join(result.messages), result
+        return None, None
+
+    def _record_workflow_curriculum(self, result: "ConnectionFlowResult") -> None:
+        self._application.record_capability_tried("scheduled_automations")
+        if not result.completed:
+            return
+        self._application.record_capability_success("scheduled_automations")
+        jobs = self._automation_workflow.list_jobs()
+        if jobs and _completed_daily_briefing(jobs):
+            self._application.record_capability_success("daily_briefing")
 
     def _automation_list_text(self) -> str:
         jobs = self._automation_workflow.list_jobs()
@@ -173,3 +197,17 @@ class ConnectorRuntime:
 
 def _language_of(text: str) -> str:
     return "zh" if any("一" <= character <= "鿿" for character in text) else "en"
+
+
+def _normalize_command(lowered: str) -> str:
+    """Strip a Telegram group `@botname` suffix from the command token."""
+    parts = lowered.split(" ", 1)
+    command = parts[0]
+    if "@" in command:
+        command = command.split("@", 1)[0]
+    return command if len(parts) == 1 else f"{command} {parts[1]}"
+
+
+def _completed_daily_briefing(jobs: list[dict]) -> bool:
+    newest = max(jobs, key=lambda job: job["created_at"])
+    return bool(newest["schedule_kind"] == "cron" and newest["destination_connector_id"])

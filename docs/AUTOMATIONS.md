@@ -64,7 +64,8 @@ Creation also works from inside a connected messaging channel: send
 `/automations add` (or say “create automation”) to the bot. The same guided
 flow runs there, and the delivery destination is preselected as the
 conversation you are typing in, so results come back to the same chat.
-`/automations` lists jobs from the channel as well.
+`/automations` lists jobs from the channel as well. In Slack, slash-prefixed
+text is captured by Slack itself, so say “create automation” instead.
 
 ## SQLite model
 

@@ -11,7 +11,7 @@ The format follows Keep a Changelog conventions. During development, changes acc
 - Added model-driven intent routing for tool-capable connections: a read-only `channel_status` tool for state questions, and side-effect-free `channel_connect`, `create_automation`, and `connect_model` directive tools that hand off to the existing guided flows; `create_automation` accepts validated name/prompt/schedule/timezone prefill extracted from the user's request so the guided flow only asks for what is missing.
 - Kept exact trigger phrases as a deterministic fast path so account-auth (external-CLI) connections without tool support keep full setup access, and excluded directive tools from gateway and unattended sessions.
 - Replaced the system-prompt command list with ASK-vs-CONNECT routing rules and a capability-verification rule so the model checks `channel_status` or /help before ever claiming a capability does not exist.
-- Added automation creation from messaging channels: `/automations add` and the trigger phrases start the guided flow inside Telegram, Slack, or WhatsApp with the current conversation preselected as the delivery destination, and `/automations` lists jobs; handled turns bypass the model.
+- Added automation creation from messaging channels: `/automations add` and the trigger phrases start the guided flow inside Telegram and WhatsApp (Slack users say “create automation”, since Slack captures slash-prefixed text) with the current conversation preselected as the delivery destination, and `/automations` lists jobs; handled turns bypass the model.
 - Added a gateway-surface system prompt so channel conversations advertise only capabilities that work there and the assistant identifies as Allpath Agent.
 
 ### Fixed

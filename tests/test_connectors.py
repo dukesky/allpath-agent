@@ -32,6 +32,8 @@ class FakeApplication:
     def __init__(self):
         self.started: list[str] = []
         self.messages: list[tuple[str, str]] = []
+        self.capabilities_tried: list[str] = []
+        self.capabilities_succeeded: list[str] = []
 
     def start_session(self, session_id: str) -> None:
         self.started.append(session_id)
@@ -39,6 +41,12 @@ class FakeApplication:
     def send(self, session_id: str, text: str):
         self.messages.append((session_id, text))
         return SimpleNamespace(agent=SimpleNamespace(content=f"reply: {text}"), task_id="task-1")
+
+    def record_capability_tried(self, capability_id: str) -> None:
+        self.capabilities_tried.append(capability_id)
+
+    def record_capability_success(self, capability_id: str) -> None:
+        self.capabilities_succeeded.append(capability_id)
 
 
 class FakeConnector:
@@ -157,6 +165,9 @@ class ConnectorAutomationCreationTestCase(unittest.TestCase):
         self.assertEqual(jobs[0]["destination_conversation_id"], "chat-1")
         self.assertIn("this conversation", " ".join(m.text for m in connector.sent))
         self.assertTrue(connector.sent[-1].text.lower().startswith("automation"))
+        self.assertIn("scheduled_automations", application.capabilities_tried)
+        self.assertIn("scheduled_automations", application.capabilities_succeeded)
+        self.assertIn("daily_briefing", application.capabilities_succeeded)
 
     def test_trigger_phrase_starts_flow_and_model_is_bypassed_until_done(self) -> None:
         connector = FakeConnector(self._messages("create automation", "cancel", "hello again"))
@@ -175,6 +186,25 @@ class ConnectorAutomationCreationTestCase(unittest.TestCase):
 
         self.assertEqual(application.messages, [])
         self.assertEqual(len(connector.sent), 1)
+
+    def test_slash_help_replies_without_model(self) -> None:
+        connector = FakeConnector(self._messages("/help"))
+        application = FakeApplication()
+
+        self._runtime(connector, application).poll_once("fake")
+
+        self.assertEqual(application.messages, [])
+        self.assertIn("/automations add", connector.sent[0].text)
+
+    def test_slash_add_with_bot_suffix_starts_flow(self) -> None:
+        connector = FakeConnector(self._messages("/automations@my_bot add"))
+        application = FakeApplication()
+
+        self._runtime(connector, application).poll_once("fake")
+
+        self.assertEqual(application.messages, [])
+        self.assertEqual(len(connector.sent), 1)
+        self.assertIn("scheduled_automations", application.capabilities_tried)
 
     def test_runtime_without_workflow_keeps_legacy_behavior(self) -> None:
         connector = FakeConnector(self._messages("/automations add"))

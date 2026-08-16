@@ -214,3 +214,39 @@ class AutomationCreationWorkflowTestCase(unittest.TestCase):
         self.assertTrue(state_run.handled)
         jobs_after = self.jobs.list_all()
         self.assertEqual(jobs_after, [])
+
+    def test_default_destination_skips_destination_step(self) -> None:
+        self.workflow.start(
+            "session-1", "en", None, default_destination=("telegram", "chat-9")
+        )
+
+        results = self._drive("Morning brief", "Summarize the news", "0 8 * * *", "UTC")
+
+        summary = "\n".join(results[-1].messages)
+        self.assertIn("confirm", summary.lower())
+        self.assertIn("this conversation", summary)
+        finished = self.workflow.handle("session-1", "confirm")
+        self.assertTrue(finished.completed)
+        job = self.jobs.list_all()[0]
+        self.assertEqual(job["destination_connector_id"], "telegram")
+        self.assertEqual(job["destination_conversation_id"], "chat-9")
+
+    def test_default_destination_with_full_prefill_starts_at_confirm(self) -> None:
+        result = self.workflow.start(
+            "session-1",
+            "en",
+            {"name": "Brief", "prompt": "Summarize", "schedule": "0 8 * * *", "timezone": "UTC"},
+            default_destination=("slack", "D123"),
+        )
+
+        self.assertIn("this conversation", "\n".join(result.messages))
+        finished = self.workflow.handle("session-1", "confirm")
+        self.assertTrue(finished.completed)
+        self.assertEqual(self.jobs.list_all()[0]["destination_conversation_id"], "D123")
+
+    def test_without_default_destination_step_still_asked(self) -> None:
+        self.workflow.start("session-1", "en")
+
+        results = self._drive("Morning brief", "Summarize the news", "0 8 * * *", "UTC")
+
+        self.assertIn("results go", "\n".join(results[-1].messages).lower())

@@ -56,11 +56,17 @@ class AutomationCreationWorkflow:
         session_id: str,
         language: str = "en",
         prefill: dict[str, str] | None = None,
+        *,
+        default_destination: tuple[str, str] | None = None,
     ) -> ConnectionFlowResult:
         active = self._runs.get_active(session_id, WORKFLOW_ID)
         if active is not None:
             return ConnectionFlowResult(True, (self._prompt(active["current_step"], dict(active["state"])),))
         state: dict[str, Any] = {"language": language}
+        if default_destination is not None:
+            state["destination_connector_id"] = default_destination[0]
+            state["destination_conversation_id"] = default_destination[1]
+            state["destination_preselected"] = True
         for fieldname, value in (prefill or {}).items():
             cleaned = str(value).strip()
             if not cleaned:
@@ -92,7 +98,7 @@ class AutomationCreationWorkflow:
                 )
                 if key not in state
             ),
-            "destination",
+            "confirm" if state.get("destination_preselected") else "destination",
         )
         self._runs.create(WORKFLOW_ID, session_id, step, state)
         return ConnectionFlowResult(True, (self._prompt(step, state),))
@@ -119,6 +125,8 @@ class AutomationCreationWorkflow:
         if command in {"back", "previous", "返回", "上一步"}:
             index = STEPS.index(active["current_step"])
             step = STEPS[max(index - 1, 0)]
+            if step == "destination" and state.get("destination_preselected"):
+                step = "timezone"
             self._runs.update(active["id"], step, state)
             return ConnectionFlowResult(True, (self._prompt(step, state),))
         return self._advance(active, state, language, cleaned)
@@ -174,7 +182,11 @@ class AutomationCreationWorkflow:
                     ),
                 )
             state["timezone"] = zone
-            return self._move(active, state, "destination")
+            return self._move(
+                active,
+                state,
+                "confirm" if state.get("destination_preselected") else "destination",
+            )
         if step == "destination":
             bindings = self._list_bindings()
             if cleaned.lower() in {"none", "no", "无", "不发送"}:
@@ -295,6 +307,8 @@ def _destination_text(state: dict[str, Any]) -> str:
     connector = state.get("destination_connector_id")
     if connector is None:
         return "local only / 仅本地"
+    if state.get("destination_preselected"):
+        return f"{connector} · this conversation / 当前会话"
     return f"{connector} · {state.get('destination_conversation_id')}"
 
 
